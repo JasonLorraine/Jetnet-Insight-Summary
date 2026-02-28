@@ -3,6 +3,9 @@ import { createServer, type Server } from "node:http";
 import { login, ensureSession, JetnetError, type SessionState } from "./jetnet/session";
 import { buildAircraftProfile } from "./services/profileBuilder";
 import { generateAISummary } from "./services/aiSummary";
+import { generateFlightSummary } from "./services/flightSummary";
+import { normalizeFlights, analyzeFlights } from "./services/flightAnalyzer";
+import { getFlightDataPaged } from "./jetnet/api";
 import { mountMcpServer } from "./mcp/server";
 import { randomUUID } from "crypto";
 
@@ -159,6 +162,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: err.message || "Failed to generate summary.",
             source: err instanceof JetnetError ? "jetnet" : "internal",
           });
+      }
+    }
+  );
+
+  app.post(
+    "/api/aircraft/:registration/flight-summary",
+    async (req: Request, res: Response) => {
+      try {
+        const session = getSession(req);
+        if (!session) {
+          return res.status(401).json({ message: "Not authenticated." });
+        }
+
+        const { provider, apiKey, maxTokens } = req.body;
+        if (!provider || !apiKey) {
+          return res
+            .status(400)
+            .json({ message: "Provider and API key required." });
+        }
+
+        const fresh = await ensureSession(session);
+        const token = req.headers.authorization?.replace("Bearer ", "") || "";
+        const entry = sessions.get(token);
+        if (entry) entry.jetnetSession = fresh;
+
+        const profile = await buildAircraftProfile(
+          req.params.registration,
+          fresh
+        );
+
+        const flightRaw = await getFlightDataPaged(profile.aircraftId, fresh);
+        const flights = normalizeFlights(flightRaw);
+        const intel = analyzeFlights(flights);
+
+        if (intel.totalFlights === 0) {
+          return res.status(404).json({
+            message:
+              "Flight activity unavailable for this aircraft. Try the standard AI summary instead.",
+          });
+        }
+
+        const summary = await generateFlightSummary(
+          profile,
+          intel,
+          provider,
+          apiKey,
+          maxTokens || 1000
+        );
+        return res.json({ ...summary, flightIntelligence: intel });
+      } catch (err: any) {
+        const status = err instanceof JetnetError ? 502 : 500;
+        return res.status(status).json({
+          message: err.message || "Failed to generate flight summary.",
+          source: err instanceof JetnetError ? "jetnet" : "internal",
+        });
       }
     }
   );

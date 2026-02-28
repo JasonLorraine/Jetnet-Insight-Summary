@@ -16,7 +16,7 @@ Aircraft sales intelligence mobile app built with React Native (Expo) and Expres
 4. **Ownership Surface**: Company profile (type, HQ, industry), key contacts with role signals (Decision Maker / Influencer / Operational), horizontal fleet strip with deep navigation, Evolution company links
 5. **Aircraft Specs**: Full technical specifications via `getAircraft` endpoint — powerplant (engine model/count/program/APU), performance (range/speed/MTOW/fuel), cabin (seats/config/Wi-Fi/refurb), airframe (total time/landings/paint), avionics (suite/operation type); displayed in collapsible grouped layout
 6. **Contact Actions**: Tap-to-call, tap-to-text, tap-to-email on contact rows; uses native `tel:`, `sms:`, `mailto:` schemes with `Linking.canOpenURL` guards; pre-fills email subject and SMS body with aircraft registration
-7. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; summaries incorporate company profile and decision-maker accessibility
+7. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; two summary modes: (a) Insight Summary — ownership, market, transactions; (b) Flight Intelligence — 12-month behavioral analysis with flight analyzer metrics (trend slope, charter detection, pre-sale signals, downtime, route repetition, base airport, international ratio)
 8. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
 9. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
 
@@ -66,10 +66,12 @@ server/
     api.ts                    # JETNET API wrapper functions
   services/
     profileBuilder.ts         # Orchestrates Golden Path parallel fetch
-    scoring.ts                # Hot/Not scoring engine (8 factors, normalized weights)
+    scoring.ts                # Hot/Not scoring engine (9 factors, normalized weights)
     modelTrends.ts            # Model market trends fetcher (24hr cached)
     disposition.ts            # Owner disposition intelligence
-    aiSummary.ts              # AI summary generation (OpenAI + Anthropic)
+    aiSummary.ts              # AI insight summary generation (OpenAI + Anthropic)
+    flightAnalyzer.ts         # Flight behavioral analysis (trend, charter, pre-sale signals)
+    flightSummary.ts          # AI flight intelligence prompt + generation
     evolutionLink.ts          # Evolution deep link builder
   mcp/
     server.ts                 # MCP server with tools and prompts
@@ -93,7 +95,8 @@ Section order follows human-question headers (Apple-style):
 - `POST /api/auth/logout` — Session cleanup
 - `GET /api/auth/health` — Session health check
 - `GET /api/aircraft/:registration/profile` — Full aircraft profile with scoring
-- `POST /api/aircraft/:registration/ai-summary` — AI summary generation
+- `POST /api/aircraft/:registration/ai-summary` — AI insight summary generation
+- `POST /api/aircraft/:registration/flight-summary` — AI flight intelligence summary
 - `POST /mcp` — MCP server (Streamable HTTP)
 - `GET /mcp` — MCP server info
 
