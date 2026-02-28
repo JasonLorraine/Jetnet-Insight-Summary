@@ -5,6 +5,9 @@ import {
   getRelationships,
   getFlightDataPaged,
   getHistoryListPaged,
+  searchFleetByCompany,
+  getCompanyList,
+  getContactList,
 } from "../jetnet/api";
 import { buildEvolutionLink } from "./evolutionLink";
 import { computeHotNotScore } from "./scoring";
@@ -19,6 +22,8 @@ import type {
   MarketSignals,
   ModelTrendSignals,
   FleetAircraft,
+  CompanyProfile,
+  Contact,
 } from "../../shared/types";
 
 function extractRelationships(data: Record<string, unknown>): Relationship[] {
@@ -119,6 +124,105 @@ function extractUtilization(data: Record<string, unknown>): UtilizationSummary |
   };
 }
 
+function classifyContactRole(title: string | null): Contact["roleSignal"] {
+  if (!title) return "Operational";
+  const t = title.toLowerCase();
+  if (
+    t.includes("director") ||
+    t.includes("vp") ||
+    t.includes("vice president") ||
+    t.includes("president") ||
+    t.includes("ceo") ||
+    t.includes("owner") ||
+    t.includes("principal") ||
+    t.includes("cfo") ||
+    t.includes("coo") ||
+    t.includes("managing") ||
+    t.includes("chairman")
+  ) {
+    return "Decision Maker";
+  }
+  if (
+    t.includes("pilot") ||
+    t.includes("captain") ||
+    t.includes("chief pilot") ||
+    t.includes("aviation manager") ||
+    t.includes("flight") ||
+    t.includes("broker")
+  ) {
+    return "Influencer";
+  }
+  return "Operational";
+}
+
+function extractContacts(data: Record<string, unknown>): Contact[] {
+  const items = (data as any)?.contactlistresult || (data as any)?.contacts || [];
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((c: any) => {
+      const firstName = c.firstname || c.contactfirstname || "";
+      const lastName = c.lastname || c.contactlastname || "";
+      const name = [firstName, lastName].filter(Boolean).join(" ");
+      if (!name) return null;
+
+      const title = c.title || c.contacttitle || null;
+      return {
+        contactName: name,
+        title,
+        email: c.email || c.contactemail || null,
+        phone: c.office || c.mobile || c.phone || null,
+        roleSignal: classifyContactRole(title),
+      } as Contact;
+    })
+    .filter(Boolean) as Contact[];
+}
+
+function extractCompanyProfile(data: Record<string, unknown>, companyId: number): CompanyProfile | null {
+  const items = (data as any)?.companylistresult || (data as any)?.companies || [];
+  const company = Array.isArray(items) ? items[0] : null;
+  if (!company) return null;
+
+  const EVOLUTION_BASE_URL = process.env.EVOLUTION_BASE_URL || "https://evolution.jetnet.com";
+
+  return {
+    companyId,
+    companyName: company.name || company.companyname || "Unknown",
+    companyType: company.companytype || company.type || null,
+    headquarters: {
+      city: company.city || null,
+      state: company.state || null,
+      country: company.country || null,
+    },
+    industry: company.industry || company.siccode || null,
+    evolutionLink: `${EVOLUTION_BASE_URL}/company/${companyId}`,
+  };
+}
+
+function extractFleetAircraft(data: Record<string, unknown>, currentAircraftId: number): FleetAircraft[] {
+  const items = (data as any)?.fleetresult || (data as any)?.fleet || [];
+  if (!Array.isArray(items)) return [];
+
+  const EVOLUTION_BASE_URL = process.env.EVOLUTION_BASE_URL || "https://evolution.jetnet.com";
+
+  return items
+    .filter((ac: any) => {
+      const id = ac.aircraftid || ac.aircraftId;
+      return id && id !== currentAircraftId;
+    })
+    .map((ac: any) => ({
+      registration: ac.regnbr || ac.registration || "N/A",
+      aircraftId: ac.aircraftid || ac.aircraftId,
+      make: ac.make || "Unknown",
+      model: ac.model || "Unknown",
+      yearMfr: ac.yearmfr || 0,
+      serialNumber: ac.serialnbr || ac.sernbr || "",
+      forSale: ac.forsale === true || ac.forsale === "Y" || String(ac.forsale).toLowerCase() === "y",
+      evolutionLink: `${EVOLUTION_BASE_URL}/aircraft/${ac.aircraftid || ac.aircraftId}`,
+    }))
+    .slice(0, 20);
+}
+
 export async function buildAircraftProfile(
   registration: string,
   session: SessionState
@@ -135,14 +239,31 @@ export async function buildAircraftProfile(
 
   let flatRelationships = extractRelationshipsFromFlat(ac);
 
-  const [picturesData, relationshipsData, flightData, historyData, modelTrendsData] =
-    await Promise.allSettled([
-      getPictures(aircraftId, session),
-      getRelationships(aircraftId, session),
-      getFlightDataPaged(aircraftId, session),
-      getHistoryListPaged(aircraftId, session),
-      modelId ? fetchModelTrends(modelId, session) : Promise.reject("no modelId"),
-    ]);
+  const ownerRelFlat = flatRelationships.find(
+    (r) => r.relationType.toLowerCase() === "owner"
+  );
+  const ownerCompanyId = ownerRelFlat?.companyId || null;
+  const ownerCompanyName = ownerRelFlat?.companyName || null;
+
+  const [
+    picturesData,
+    relationshipsData,
+    flightData,
+    historyData,
+    modelTrendsData,
+    companyData,
+    contactsData,
+    fleetData,
+  ] = await Promise.allSettled([
+    getPictures(aircraftId, session),
+    getRelationships(aircraftId, session),
+    getFlightDataPaged(aircraftId, session),
+    getHistoryListPaged(aircraftId, session),
+    modelId ? fetchModelTrends(modelId, session) : Promise.reject("no modelId"),
+    ownerCompanyId ? getCompanyList(ownerCompanyId, session) : Promise.reject("no companyId"),
+    ownerCompanyId ? getContactList(ownerCompanyId, session) : Promise.reject("no companyId"),
+    ownerCompanyName ? searchFleetByCompany(ownerCompanyName, session) : Promise.reject("no companyName"),
+  ]);
 
   const pictures =
     picturesData.status === "fulfilled"
@@ -181,6 +302,21 @@ export async function buildAircraftProfile(
       ? (modelTrendsData.value as ModelTrendSignals)
       : null;
 
+  const companyProfile: CompanyProfile | null =
+    companyData.status === "fulfilled" && ownerCompanyId
+      ? extractCompanyProfile(companyData.value, ownerCompanyId)
+      : null;
+
+  const contacts: Contact[] =
+    contactsData.status === "fulfilled"
+      ? extractContacts(contactsData.value)
+      : [];
+
+  const fleetAircraft: FleetAircraft[] =
+    fleetData.status === "fulfilled"
+      ? extractFleetAircraft(fleetData.value, aircraftId)
+      : [];
+
   const profile: AircraftProfile = {
     registration: ac.regnbr || registration,
     aircraftId,
@@ -202,6 +338,8 @@ export async function buildAircraftProfile(
       country: ac.basecountry || null,
     },
     relationships,
+    companyProfile,
+    contacts,
     pictures,
     utilizationSummary: utilization,
     marketSignals,
@@ -215,15 +353,10 @@ export async function buildAircraftProfile(
 
   profile.hotNotScore = computeHotNotScore(profile);
 
-  const ownerRel = relationships.find(
-    (r) => r.relationType.toLowerCase() === "owner"
-  );
   const priorAircraft = history
     .filter((h) => h.transactionType.toLowerCase().includes("sale"))
     .map((h) => h.description)
     .slice(0, 5);
-
-  const fleetAircraft: FleetAircraft[] = [];
 
   profile.ownerIntelligence = computeDisposition(
     profile,

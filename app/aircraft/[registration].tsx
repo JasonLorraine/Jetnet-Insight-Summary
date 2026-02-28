@@ -18,12 +18,14 @@ import { useThemeColors, getScoreColor } from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { AircraftCard } from "@/components/AircraftCard";
-import type { ModelTrendSignals } from "@/shared/types";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { FactorBar } from "@/components/FactorBar";
 import { OwnerCard } from "@/components/OwnerCard";
+import { CompanyCard } from "@/components/CompanyCard";
+import { ContactRow } from "@/components/ContactRow";
+import { FleetItem } from "@/components/FleetItem";
 import { ProfileSkeleton } from "@/components/SkeletonLoader";
-import type { AircraftProfile } from "@/shared/types";
+import type { AircraftProfile, ModelTrendSignals } from "@/shared/types";
 
 export default function AircraftProfileScreen() {
   const { registration } = useLocalSearchParams<{ registration: string }>();
@@ -145,6 +147,58 @@ export default function AircraftProfileScreen() {
 
       {profile.ownerIntelligence ? (
         <OwnerCard intel={profile.ownerIntelligence} />
+      ) : null}
+
+      {(profile.companyProfile || profile.contacts.length > 0 || (profile.ownerIntelligence?.fleetAircraft && profile.ownerIntelligence.fleetAircraft.length > 0)) ? (
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="people-outline" size={18} color={colors.tint} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Ownership Intelligence
+            </Text>
+          </View>
+
+          {profile.companyProfile ? (
+            <CompanyCard company={profile.companyProfile} />
+          ) : null}
+
+          {profile.ownerIntelligence?.fleetAircraft && profile.ownerIntelligence.fleetAircraft.length > 0 ? (
+            <View style={styles.fleetSection}>
+              <Text style={[styles.subSectionTitle, { color: colors.textSecondary }]}>
+                Fleet ({profile.ownerIntelligence.fleetAircraft.length} aircraft)
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.fleetList}
+              >
+                {profile.ownerIntelligence.fleetAircraft.map((item) => (
+                  <View key={item.aircraftId} style={styles.fleetCard}>
+                    <FleetItem
+                      aircraft={item}
+                      onPress={() =>
+                        router.push(
+                          `/aircraft/${encodeURIComponent(item.registration)}`
+                        )
+                      }
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {profile.contacts.length > 0 ? (
+            <View style={styles.contactsSection}>
+              <Text style={[styles.subSectionTitle, { color: colors.textSecondary }]}>
+                Key Contacts ({profile.contacts.length})
+              </Text>
+              {profile.contacts.slice(0, 8).map((contact, i) => (
+                <ContactRow key={i} contact={contact} />
+              ))}
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
       {profile.modelTrends ? (
@@ -504,6 +558,26 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     marginTop: 10,
     gap: 2,
+  },
+  fleetSection: {
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  subSectionTitle: {
+    fontSize: 12,
+    fontWeight: "500" as const,
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
+    marginBottom: 8,
+  },
+  fleetList: {
+    gap: 8,
+  },
+  fleetCard: {
+    width: 220,
+  },
+  contactsSection: {
+    marginTop: 4,
   },
   aiButton: {
     flexDirection: "row",

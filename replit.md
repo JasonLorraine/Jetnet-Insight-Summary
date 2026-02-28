@@ -12,10 +12,11 @@ Aircraft sales intelligence mobile app built with React Native (Expo) and Expres
 
 1. **JETNET Integration**: Session-managed authentication with auto-refresh, parallel data fetching (Golden Path), automatic re-login on 401 (stored credentials)
 2. **Hot/Not Scoring**: Deterministic 0-100 score with 8 weighted factors (liquidity, model market momentum, DOM, age, transactions, utilization, ownership, completeness)
-3. **Owner Disposition Intelligence**: Sell probability (0-100) with archetype classification, brand loyalty, replacement cycle, and fleet analysis
-4. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device
-5. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft
-6. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
+3. **Owner Disposition Intelligence**: Sell probability (0-100) with archetype classification, brand loyalty, replacement cycle, fleet analysis, and contact accessibility scoring
+4. **Ownership Surface**: Company profile (type, HQ, industry), key contacts with role signals (Decision Maker / Influencer / Operational), horizontal fleet strip with deep navigation, Evolution company links
+5. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; summaries incorporate company profile and decision-maker accessibility
+6. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
+7. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
 
 ## Project Structure
 
@@ -35,7 +36,9 @@ components/                   # Reusable UI components
   ScoreGauge.tsx              # Circular score gauge and pill badge
   FactorBar.tsx               # Horizontal bar for scoring factors
   OwnerCard.tsx               # Owner intelligence panel
-  FleetItem.tsx               # Fleet list row item
+  CompanyCard.tsx             # Operating entity card (company profile + Evolution link)
+  ContactRow.tsx              # Contact row with role signal badge
+  FleetItem.tsx               # Fleet list row item (supports horizontal scroll)
   SkeletonLoader.tsx          # Loading skeleton shimmer
   SummaryCard.tsx             # AI summary display
   ErrorBoundary.tsx           # Error boundary component

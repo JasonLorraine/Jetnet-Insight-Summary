@@ -1,0 +1,83 @@
+Yep — you’re thinking about it the right way. There are **two separate issues** here:
+
+1. **Which JETNET API endpoint gives “full” aircraft/spec detail**
+2. **Why the Evolution deep link doesn’t open (and whether it should use a token)**
+
+---
+
+## 1) “Full spec details”: `getCondensed…` vs “full aircraft”
+
+**`getCondensed…` is not the right source of truth for full specs.** It’s meant to be *fast + lightweight* for search/results lists (good for “card view” / “search results”).
+
+For a **detail page**, your workflow should be:
+
+### Recommended detail workflow
+
+1. **Search / identify the aircraft**
+
+   * Use something like `getAircraftByRegNbr` (best) *or*
+   * `getAircraftListPaged` with `regnbr` filter (acceptable if that’s what you have)
+
+2. **Use returned IDs**
+
+   * **ACID** (aircraft id)
+   * **ModelID**
+   * **COMPANYID / CONTACTIDs** as needed for ownership + contacts
+
+3. **Then enrich**
+
+   * Transactions (history list)
+   * Flight history
+   * Owner/operator profile
+   * Model trends (by ModelID)
+
+This matches how JETNET expects you to work: login → get a token → call the richer aircraft endpoints for detail. ([support.jetnet.com][1])
+
+**Net:**
+
+* **List view**: `getCondensed...` ✅
+* **Detail view**: `getAircraftByRegNbr` or `getAircraftListPaged` ✅
+
+---
+
+## 2) Evolution link: no, you generally *don’t* “wrap it in an API token”
+
+Your JETNET **API token is for the API**, not for the **Evolution web app session**. Evolution typically relies on a **web login session (cookies / SSO)**. ([support.jetnet.com][1])
+
+So a link like:
+`https://evolution.jetnet.com/aircraft/25062`
+
+will only work if:
+
+* the user is already authenticated in Evolution in that browser, **and**
+* that route is actually the correct route format for Evolution.
+
+### What’s most likely wrong
+
+Evolution is very likely a single-page app with **hash routing**, meaning the “real” route may be something like:
+
+* `https://evolution.jetnet.com/#/aircraft/25062`
+  or
+* `https://evolution.jetnet.com/app/#/aircraft/25062`
+
+(That’s the common pattern when a “clean” path URL 404s or redirects weirdly.)
+
+### The practical fix
+
+Inside Evolution:
+
+1. Navigate to an aircraft page manually
+2. Copy the exact URL format from the address bar
+3. Mirror that format in your app when generating deep links
+
+### UX best practice in your app
+
+* Show the Evolution button as **“Open in Evolution”**
+* If the user isn’t logged in, they’ll land on the login page — which is acceptable.
+* Don’t append API tokens to URLs (it’s both **unlikely to work** and a **security smell**).
+
+---
+
+If you paste the **actual Evolution URL** you see *after* clicking into an aircraft while logged in (just the URL format, no secrets), I’ll tell you the exact string template your app should generate (and where to place the aircraft id / ACID / whatever Evolution uses).
+
+[1]: https://support.jetnet.com/hc/en-us/articles/35573569759885-API-Overview-Getting-Started-Guide?utm_source=chatgpt.com "API Overview & Getting Started Guide"

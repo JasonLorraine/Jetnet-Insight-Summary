@@ -19,6 +19,15 @@ Est. AFTT: ${profile.estimatedAFTT || "Unknown"}
 Owner: ${profile.relationships.find((r) => r.relationType.toLowerCase() === "owner")?.companyName || "Unknown"}
 Operator: ${profile.relationships.find((r) => r.relationType.toLowerCase() === "operator")?.companyName || "Unknown"}
 
+${profile.companyProfile ? `Operating Entity:
+  Company: ${profile.companyProfile.companyName}
+  Type: ${profile.companyProfile.companyType || "Unknown"}
+  HQ: ${[profile.companyProfile.headquarters.city, profile.companyProfile.headquarters.state, profile.companyProfile.headquarters.country].filter(Boolean).join(", ") || "Unknown"}
+  Industry: ${profile.companyProfile.industry || "Unknown"}` : "Operating Entity: Not identified"}
+
+${profile.contacts.length > 0 ? `Key Contacts (${profile.contacts.length}):
+${profile.contacts.slice(0, 5).map((c) => `  - ${c.contactName}${c.title ? ` (${c.title})` : ""} — ${c.roleSignal}`).join("\n")}` : "Key Contacts: None identified"}
+
 Relationships: ${profile.relationships.length}
 Pictures Available: ${profile.pictures.length}
 Transaction History Entries: ${profile.history.length}
@@ -57,6 +66,8 @@ Guidelines:
 - redFlags: "Why it might stall" concerns (1-3 bullets, can be empty array if none)
 - suggestedNextQuestions: What a broker should ask or investigate next
 - Incorporate model market trends using the provided marketHeat and DOM trend signals when discussing timing
+- When company profile and contacts are available, reference the operating entity and note decision-maker accessibility
+- If multiple decision makers are identified, highlight the deal velocity advantage
 - Use only the provided data. If data is missing, note what's missing.
 - Include Evolution link reference if actionable.`;
 }

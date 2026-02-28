@@ -112,6 +112,34 @@ export async function searchFleetByCompany(
   );
 }
 
+export async function getCompanyList(
+  companyId: number,
+  session: SessionState
+): Promise<Record<string, unknown>> {
+  return jetnetRequest(
+    "POST",
+    `/api/Company/getCompanyList/{apiToken}/100/1`,
+    session,
+    {
+      companyid: companyId,
+    }
+  );
+}
+
+export async function getContactList(
+  companyId: number,
+  session: SessionState
+): Promise<Record<string, unknown>> {
+  return jetnetRequest(
+    "POST",
+    `/api/Contact/getContactList/{apiToken}/100/1`,
+    session,
+    {
+      companyid: companyId,
+    }
+  );
+}
+
 export async function getMarketTrends(
   modelId: number,
   session: SessionState

@@ -228,7 +228,31 @@ export function computeDisposition(
       : "Not currently listed.",
   });
 
-  const sellProbability = factors.reduce((sum, f) => sum + f.score, 0);
+  const contacts = profile.contacts || [];
+  const decisionMakers = contacts.filter((c) => c.roleSignal === "Decision Maker").length;
+  const influencers = contacts.filter((c) => c.roleSignal === "Influencer").length;
+  const totalContacts = contacts.length;
+
+  let contactScore: number;
+  if (decisionMakers >= 2) contactScore = 10;
+  else if (decisionMakers >= 1 && influencers >= 1) contactScore = 8;
+  else if (totalContacts >= 2) contactScore = 6;
+  else if (totalContacts >= 1) contactScore = 4;
+  else contactScore = 3;
+
+  factors.push({
+    name: "Contact Accessibility",
+    weight: 0.1,
+    score: contactScore,
+    maxScore: 10,
+    explanation: totalContacts > 0
+      ? `${totalContacts} contacts identified (${decisionMakers} decision maker${decisionMakers !== 1 ? "s" : ""}, ${influencers} influencer${influencers !== 1 ? "s" : ""}). ${decisionMakers >= 1 ? "Direct decision-maker access accelerates deals." : "No clear decision-maker identified."}`
+      : "No contact information available.",
+  });
+
+  const rawSellProbability = factors.reduce((sum, f) => sum + f.score, 0);
+  const maxPossible = factors.reduce((sum, f) => sum + f.maxScore, 0);
+  const sellProbability = Math.round((rawSellProbability / maxPossible) * 100);
 
   let windowLow: number;
   let windowHigh: number;
@@ -248,7 +272,7 @@ export function computeDisposition(
 
   const confidence = Math.min(
     0.95,
-    0.5 + (priorAircraft.length > 0 ? 0.15 : 0) + (fleetSize > 0 ? 0.1 : 0) + (profile.history.length > 0 ? 0.1 : 0) + (profile.utilizationSummary ? 0.1 : 0)
+    0.5 + (priorAircraft.length > 0 ? 0.1 : 0) + (fleetSize > 0 ? 0.1 : 0) + (profile.history.length > 0 ? 0.1 : 0) + (profile.utilizationSummary ? 0.08 : 0) + (totalContacts > 0 ? 0.07 : 0)
   );
 
   const upgradePattern =

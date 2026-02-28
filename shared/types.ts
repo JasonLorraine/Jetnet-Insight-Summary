@@ -93,6 +93,27 @@ export interface HistoryEntry {
   description: string;
 }
 
+export interface CompanyProfile {
+  companyId: number;
+  companyName: string;
+  companyType: string | null;
+  headquarters: {
+    city: string | null;
+    state: string | null;
+    country: string | null;
+  };
+  industry: string | null;
+  evolutionLink: string;
+}
+
+export interface Contact {
+  contactName: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  roleSignal: "Decision Maker" | "Influencer" | "Operational";
+}
+
 export interface ModelTrendSignals {
   modelId: number;
   avgDaysOnMarket: number | null;
@@ -125,6 +146,8 @@ export interface AircraftProfile {
     country: string | null;
   };
   relationships: Relationship[];
+  companyProfile: CompanyProfile | null;
+  contacts: Contact[];
   pictures: AircraftPicture[];
   utilizationSummary: UtilizationSummary | null;
   marketSignals: MarketSignals;
