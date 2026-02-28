@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { SkeletonLine } from "@/components/skeletons/SkeletonLine";
 import { ContentReveal } from "@/components/ContentReveal";
 import { CompanyCard } from "@/components/CompanyCard";
 import { FleetItem } from "@/components/FleetItem";
+import { PhotoGallery } from "@/components/PhotoGallery";
 import type { AircraftProfile, AircraftPicture } from "@/shared/types";
 
 interface OverviewTabProps {
@@ -56,6 +57,8 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
   const colorScheme = useColorScheme();
   const colors = useThemeColors(colorScheme);
   const router = useRouter();
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
 
   const resolvedPictures = pictures ?? profile.pictures;
   const showPhotos = resolvedPictures && resolvedPictures.length > 0;
@@ -96,13 +99,27 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
             contentContainerStyle={styles.galleryContent}
           >
             {resolvedPictures!.map((pic, idx) => (
-              <View key={idx} style={styles.photoWrap}>
+              <TouchableOpacity
+                key={idx}
+                style={styles.photoWrap}
+                activeOpacity={0.85}
+                onPress={() => {
+                  setGalleryIndex(idx);
+                  setGalleryOpen(true);
+                }}
+              >
                 <Image
                   source={{ uri: pic.url }}
                   style={styles.photo}
                   contentFit="cover"
                   transition={200}
                 />
+                {resolvedPictures!.length > 1 && idx === 0 ? (
+                  <View style={styles.photoCountBadge}>
+                    <Ionicons name="images-outline" size={12} color="#FFFFFF" />
+                    <Text style={styles.photoCountText}>{resolvedPictures!.length}</Text>
+                  </View>
+                ) : null}
                 {pic.caption ? (
                   <Text
                     style={[styles.photoCaption, { color: colors.secondaryLabel }]}
@@ -111,9 +128,15 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
                     {pic.caption}
                   </Text>
                 ) : null}
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
+          <PhotoGallery
+            pictures={resolvedPictures!}
+            visible={galleryOpen}
+            initialIndex={galleryIndex}
+            onClose={() => setGalleryOpen(false)}
+          />
         </ContentReveal>
       ) : null}
 
@@ -332,6 +355,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     paddingHorizontal: 4,
+  },
+  photoCountBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  photoCountText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600" as const,
+    fontVariant: ["tabular-nums" as const],
   },
   heroSection: {
     marginBottom: 20,

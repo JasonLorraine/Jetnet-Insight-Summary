@@ -501,7 +501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           marketIntelData = {
             available: true,
             avgDaysOnMarket: profile.modelTrends.avgDaysOnMarket ?? undefined,
-            modelForSaleCount: profile.modelTrends.forSaleCount ?? undefined,
+            modelForSaleCount: undefined,
           };
         }
 

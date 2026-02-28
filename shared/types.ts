@@ -299,6 +299,10 @@ export interface CondensedAircraftProfile {
   lastInspectionType: string | null;
   lastInspectionDate: string | null;
 
+  estimatedValue: number | null;
+  avgEstimatedValue: number | null;
+  weightClass: string | null;
+
   ownerCompanyName: string | null;
   ownerCompanyId: number | null;
   operatorCompanyName: string | null;

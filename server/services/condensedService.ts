@@ -11,22 +11,44 @@ function strOrNull(val: unknown): string | null {
   return String(val);
 }
 
-export function normalizeCondensedRecord(raw: Record<string, unknown>): CondensedAircraftProfile {
+function lowercaseKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    result[key.toLowerCase()] = obj[key];
+  }
+  return result;
+}
+
+export function normalizeCondensedRecord(rawInput: Record<string, unknown>): CondensedAircraftProfile {
+  const raw = lowercaseKeys(rawInput);
+
+  const eng1tt = nullIfZero(raw.eng1tt);
+  const eng2tt = nullIfZero(raw.eng2tt);
+  const eng3tt = nullIfZero(raw.eng3tt);
+  const eng4tt = nullIfZero(raw.eng4tt);
+  const engineTotalHours = eng1tt;
+
+  const forSaleRaw = raw.asking ?? raw.forsale;
+  const forSale =
+    forSaleRaw === true ||
+    String(forSaleRaw).toLowerCase() === "true" ||
+    String(forSaleRaw).toLowerCase() === "for sale";
+
   return {
-    aircraftId: Number(raw.aircraftid) || 0,
+    aircraftId: Number(raw.acid ?? raw.aircraftid) || 0,
     regNbr: String(raw.regnbr || ""),
-    serialNumber: String(raw.serialnumber || ""),
-    yearMfr: Number(raw.yearmfr) || 0,
+    serialNumber: String(raw.serialnbr ?? raw.serialnumber ?? ""),
+    yearMfr: Number(raw.yearmfg ?? raw.yearmfr) || 0,
     make: String(raw.make || ""),
     model: String(raw.model || ""),
     modelId: Number(raw.modelid) || 0,
 
-    aircraftType: String(raw.aircrafttype || ""),
-    category: String(raw.category || ""),
-    engineMake: strOrNull(raw.enginemake),
-    engineModel: strOrNull(raw.enginemodel),
-    engineCount: nullIfZero(raw.enginecount),
-    maxPassengers: nullIfZero(raw.maxpassengers),
+    aircraftType: String(raw.airframetype ?? raw.aircrafttype ?? ""),
+    category: String(raw.categorysize ?? raw.category ?? ""),
+    engineMake: strOrNull(raw.manufacturer ?? raw.enginemake),
+    engineModel: strOrNull(raw.engmodel ?? raw.enginemodel),
+    engineCount: nullIfZero(raw.enginecount) ?? (eng2tt != null ? (eng3tt != null ? (raw.eng4tt != null ? 4 : 3) : 2) : eng1tt != null ? 1 : null),
+    maxPassengers: nullIfZero(raw.passgr ?? raw.maxpassengers),
     maxRange: nullIfZero(raw.maxrange),
     maxSpeed: nullIfZero(raw.maxspeed),
     mtow: nullIfZero(raw.mtow),
@@ -34,39 +56,51 @@ export function normalizeCondensedRecord(raw: Record<string, unknown>): Condense
     cabinWidth: nullIfZero(raw.cabinwidth),
     cabinLength: nullIfZero(raw.cabinlength),
     baggageCapacity: nullIfZero(raw.baggagecapacity),
-    airframeTotalHours: nullIfZero(raw.airframetotalhours),
-    airframeTotalLandings: nullIfZero(raw.airframetotallandings),
-    engineTotalHours: nullIfZero(raw.enginetotalhours),
+    airframeTotalHours: nullIfZero(raw.aftt ?? raw.airframetotalhours),
+    airframeTotalLandings: nullIfZero(raw.landings ?? raw.airframetotallandings),
+    engineTotalHours: engineTotalHours,
 
-    country: strOrNull(raw.country),
-    state: strOrNull(raw.state),
-    city: strOrNull(raw.city),
-    basedAirport: strOrNull(raw.basedairport),
+    country: strOrNull(raw.basecountry ?? raw.country),
+    state: strOrNull(raw.basestate ?? raw.state),
+    city: strOrNull(raw.basecity ?? raw.city),
+    basedAirport: strOrNull(raw.baseicao ?? raw.baseiata ?? raw.basedairport),
     lifecycle: strOrNull(raw.lifecycle),
 
-    forSale: String(raw.forsale).toLowerCase() === "true",
-    askingPrice: nullIfZero(raw.askingprice),
+    forSale,
+    askingPrice: nullIfZero(raw.askingamt ?? raw.askingprice),
     daysOnMarket: nullIfZero(raw.daysonmarket),
 
     avionics: strOrNull(raw.avionics),
-    interiorDate: strOrNull(raw.interiordate),
-    exteriorDate: strOrNull(raw.exteriordate),
-    lastInspectionType: strOrNull(raw.lastinspectiontype),
-    lastInspectionDate: strOrNull(raw.lastinspectiondate),
+    interiorDate: strOrNull(raw.intyr ?? raw.interiordate),
+    exteriorDate: strOrNull(raw.extyr ?? raw.exteriordate),
+    lastInspectionType: strOrNull(raw.mxprog ?? raw.lastinspectiontype),
+    lastInspectionDate: strOrNull(raw.timesasofdate ?? raw.lastinspectiondate),
 
-    ownerCompanyName: strOrNull(raw.ownercompanyname),
-    ownerCompanyId: nullIfZero(raw.ownercompanyid),
-    operatorCompanyName: strOrNull(raw.operatorcompanyname),
-    operatorCompanyId: nullIfZero(raw.operatorcompanyid),
-    managerCompanyName: strOrNull(raw.managercompanyname),
-    managerCompanyId: nullIfZero(raw.managercompanyid),
+    estimatedValue: nullIfZero(raw.evalue ?? raw.estimatedvalue),
+    avgEstimatedValue: nullIfZero(raw.avgevalue ?? raw.averageestimatedvalue),
+    weightClass: strOrNull(raw.weightclass),
+
+    ownerCompanyName: strOrNull(raw.comp1name ?? raw.ownercompanyname),
+    ownerCompanyId: nullIfZero(raw.comp1id ?? raw.ownercompanyid),
+    operatorCompanyName: strOrNull(raw.comp2name ?? raw.operatorcompanyname),
+    operatorCompanyId: nullIfZero(raw.comp2id ?? raw.operatorcompanyid),
+    managerCompanyName: strOrNull(raw.chpilotcompname ?? raw.managercompanyname),
+    managerCompanyId: nullIfZero(raw.chpilotcompid ?? raw.managercompanyid),
   };
+}
+
+function findKey(obj: Record<string, unknown>, target: string): string | undefined {
+  const lower = target.toLowerCase();
+  return Object.keys(obj).find((k) => k.toLowerCase() === lower);
 }
 
 export function normalizeCondensedResponse(
   raw: Record<string, unknown>
 ): CondensedAircraftProfile | null {
-  const records = (raw as any).aircraftowneroperators;
-  if (!Array.isArray(records) || records.length === 0) return null;
+  const key = findKey(raw, "aircraftowneroperators");
+  const records = key ? (raw as any)[key] : undefined;
+  if (!Array.isArray(records) || records.length === 0) {
+    return null;
+  }
   return normalizeCondensedRecord(records[0]);
 }

@@ -72,8 +72,6 @@ interface SpecRowData {
 
 function getSpecRows(condensed: CondensedAircraftProfile): SpecRowData[] {
   return [
-    { label: "Range", value: condensed.maxRange, suffix: " nm" },
-    { label: "Max Speed", value: condensed.maxSpeed, suffix: " ktas" },
     { label: "Passengers", value: condensed.maxPassengers },
     {
       label: "Engines",
@@ -82,6 +80,8 @@ function getSpecRows(condensed: CondensedAircraftProfile): SpecRowData[] {
           ? `${condensed.engineCount ?? ""} x ${condensed.engineModel}`.trim()
           : condensed.engineCount,
     },
+    { label: "Range", value: condensed.maxRange, suffix: " nm" },
+    { label: "Max Speed", value: condensed.maxSpeed, suffix: " ktas" },
     { label: "MTOW", value: condensed.mtow, suffix: " lbs" },
     { label: "Cabin Height", value: condensed.cabinHeight, suffix: " in" },
     { label: "Cabin Width", value: condensed.cabinWidth, suffix: " in" },
@@ -90,6 +90,65 @@ function getSpecRows(condensed: CondensedAircraftProfile): SpecRowData[] {
     { label: "Airframe Hours", value: condensed.airframeTotalHours },
     { label: "Airframe Landings", value: condensed.airframeTotalLandings },
     { label: "Engine Hours", value: condensed.engineTotalHours },
+    { label: "Base Airport", value: condensed.basedAirport },
+    { label: "Avionics", value: condensed.avionics },
+    { label: "Maintenance Program", value: condensed.lastInspectionType },
+    { label: "Interior Year", value: condensed.interiorDate },
+    { label: "Exterior Year", value: condensed.exteriorDate },
+  ];
+}
+
+function getSpecRowsFromProfile(profile: AircraftProfile): SpecRowData[] {
+  const specs = profile.specs;
+  if (!specs) return [];
+  return [
+    { label: "Passengers", value: specs.cabinSeats },
+    {
+      label: "Engines",
+      value:
+        specs.engineModel
+          ? `${specs.engineCount ?? ""} x ${specs.engineModel}`.trim()
+          : specs.engineCount,
+    },
+    { label: "Range", value: specs.rangeNm, suffix: " nm" },
+    { label: "Max Speed", value: specs.maxSpeed, suffix: " ktas" },
+    { label: "MTOW", value: specs.mtow, suffix: " lbs" },
+    { label: "Landings", value: specs.totalLandings },
+    { label: "Avionics", value: specs.avionicsSuite },
+    { label: "WiFi", value: specs.wifiEquipped != null ? (specs.wifiEquipped ? "Yes" : "No") : null },
+  ];
+}
+
+function getMergedSpecRows(
+  condensed: CondensedAircraftProfile,
+  profile: AircraftProfile | null
+): SpecRowData[] {
+  const specs = profile?.specs;
+  return [
+    { label: "Passengers", value: condensed.maxPassengers ?? specs?.cabinSeats },
+    {
+      label: "Engines",
+      value:
+        (condensed.engineModel ?? specs?.engineModel)
+          ? `${condensed.engineCount ?? specs?.engineCount ?? ""} x ${condensed.engineModel ?? specs?.engineModel}`.trim()
+          : condensed.engineCount ?? specs?.engineCount,
+    },
+    { label: "Range", value: condensed.maxRange ?? specs?.rangeNm, suffix: " nm" },
+    { label: "Max Speed", value: condensed.maxSpeed ?? specs?.maxSpeed, suffix: " ktas" },
+    { label: "MTOW", value: condensed.mtow ?? specs?.mtow, suffix: " lbs" },
+    { label: "Cabin Height", value: condensed.cabinHeight, suffix: " in" },
+    { label: "Cabin Width", value: condensed.cabinWidth, suffix: " in" },
+    { label: "Cabin Length", value: condensed.cabinLength, suffix: " in" },
+    { label: "Baggage", value: condensed.baggageCapacity, suffix: " cu ft" },
+    { label: "Airframe Hours", value: condensed.airframeTotalHours },
+    { label: "Airframe Landings", value: condensed.airframeTotalLandings ?? specs?.totalLandings },
+    { label: "Engine Hours", value: condensed.engineTotalHours },
+    { label: "Base Airport", value: condensed.basedAirport },
+    { label: "Avionics", value: condensed.avionics ?? specs?.avionicsSuite },
+    { label: "Maintenance Program", value: condensed.lastInspectionType },
+    { label: "Interior Year", value: condensed.interiorDate },
+    { label: "Exterior Year", value: condensed.exteriorDate },
+    ...(specs?.wifiEquipped != null ? [{ label: "WiFi", value: specs.wifiEquipped ? "Yes" : "No" }] : []),
   ];
 }
 
@@ -98,11 +157,17 @@ function hasAnySpecValue(condensed: CondensedAircraftProfile): boolean {
   return rows.some((r) => r.value != null && r.value !== "" && r.value !== 0);
 }
 
+function hasAnySpecRowValue(rows: SpecRowData[]): boolean {
+  return rows.some((r) => r.value != null && r.value !== "" && r.value !== 0);
+}
+
 function hasMarketData(condensed: CondensedAircraftProfile): boolean {
   return (
     condensed.forSale ||
     condensed.daysOnMarket != null ||
-    condensed.askingPrice != null
+    condensed.askingPrice != null ||
+    condensed.estimatedValue != null ||
+    condensed.lifecycle != null
   );
 }
 
@@ -112,12 +177,14 @@ function formatNumber(val: number): string {
 
 function SpecsSection({
   condensed,
+  profile,
   colors,
 }: {
   condensed: CondensedAircraftProfile;
+  profile?: AircraftProfile | null;
   colors: ReturnType<typeof useThemeColors>;
 }) {
-  const rows = getSpecRows(condensed).filter(
+  const rows = (profile ? getMergedSpecRows(condensed, profile) : getSpecRows(condensed)).filter(
     (r) => r.value != null && r.value !== "" && r.value !== 0
   );
   if (rows.length === 0) return null;
@@ -154,6 +221,65 @@ function SpecsSection({
                 </Text>
               </View>
               {i < rows.length - 1 ? (
+                <View
+                  style={[
+                    sectionStyles.separator,
+                    { backgroundColor: colors.separator },
+                  ]}
+                />
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function FallbackSpecsSection({
+  rows,
+  colors,
+}: {
+  rows: SpecRowData[];
+  colors: ReturnType<typeof useThemeColors>;
+}) {
+  const filtered = rows.filter(
+    (r) => r.value != null && r.value !== "" && r.value !== 0
+  );
+  if (filtered.length === 0) return null;
+
+  return (
+    <View style={sectionStyles.container}>
+      <Text style={[sectionStyles.sectionTitle, { color: colors.tertiaryLabel }]}>
+        AIRCRAFT SPECIFICATIONS
+      </Text>
+      <View
+        style={[
+          sectionStyles.card,
+          { backgroundColor: colors.secondaryBackground },
+        ]}
+      >
+        {filtered.map((row, i) => {
+          const displayVal =
+            typeof row.value === "number"
+              ? `${formatNumber(row.value)}${row.suffix ?? ""}`
+              : `${row.value}${row.suffix ?? ""}`;
+
+          return (
+            <View key={row.label}>
+              <View style={sectionStyles.specRow}>
+                <Text
+                  style={[sectionStyles.specLabel, { color: colors.tertiaryLabel }]}
+                >
+                  {row.label}
+                </Text>
+                <Text
+                  style={[sectionStyles.specValue, { color: colors.primaryLabel }]}
+                >
+                  {displayVal}
+                </Text>
+              </View>
+              {i < filtered.length - 1 ? (
                 <View
                   style={[
                     sectionStyles.separator,
@@ -545,6 +671,34 @@ function MarketContextSection({
     });
   }
 
+  if (condensed.estimatedValue != null) {
+    items.push({
+      label: "Estimated Value",
+      value: `$${formatNumber(condensed.estimatedValue)}`,
+    });
+  }
+
+  if (condensed.avgEstimatedValue != null) {
+    items.push({
+      label: "Model Avg Value",
+      value: `$${formatNumber(condensed.avgEstimatedValue)}`,
+    });
+  }
+
+  if (condensed.lifecycle) {
+    items.push({
+      label: "Lifecycle Status",
+      value: condensed.lifecycle,
+    });
+  }
+
+  if (condensed.weightClass) {
+    items.push({
+      label: "Weight Class",
+      value: condensed.weightClass,
+    });
+  }
+
   return (
     <View style={sectionStyles.container}>
       <Text style={[sectionStyles.sectionTitle, { color: colors.tertiaryLabel }]}>
@@ -647,17 +801,19 @@ export function SpecsIntelTab({
   const showMarket =
     personaId != null && MARKET_VISIBLE_PERSONAS.includes(personaId);
 
-  const specsReady = !!condensed;
-  const contactsReady = !!relationships;
+  const profileSpecRows = profile ? getSpecRowsFromProfile(profile) : [];
+  const hasProfileSpecs = hasAnySpecRowValue(profileSpecRows);
+  const specsReady = !!condensed || hasProfileSpecs;
+  const contactsReady = !!relationships || (profile?.contacts?.length ?? 0) > 0;
   const flightsReady = !!profile?.utilizationSummary;
   const marketReady = !!condensed && showMarket;
 
-  const hasSpecs = condensed ? hasAnySpecValue(condensed) : false;
+  const hasSpecs = condensed
+    ? hasAnySpecRowValue(profile ? getMergedSpecRows(condensed, profile) : getSpecRows(condensed))
+    : hasProfileSpecs;
   const hasContacts =
-    relationships
-      ? relationships.recommendations.length > 0 ||
-        (profile?.contacts?.length ?? 0) > 0
-      : false;
+    (relationships?.recommendations?.length ?? 0) > 0 ||
+    (profile?.contacts?.length ?? 0) > 0;
   const hasFlights = !!profile?.utilizationSummary;
   const hasMarket = condensed ? hasMarketData(condensed) && showMarket : false;
 
@@ -677,9 +833,19 @@ export function SpecsIntelTab({
           ) : null;
         }
         if (!hasSpecs) return null;
+        if (condensed) {
+          const mergedRows = profile ? getMergedSpecRows(condensed, profile) : getSpecRows(condensed);
+          const filtered = mergedRows.filter((r) => r.value != null && r.value !== "" && r.value !== 0);
+          if (filtered.length === 0) return null;
+          return (
+            <ContentReveal key={key} visible={true} delay={delay}>
+              <SpecsSection condensed={condensed} profile={profile} colors={colors} />
+            </ContentReveal>
+          );
+        }
         return (
-          <ContentReveal key={key} visible={specsReady} delay={delay}>
-            <SpecsSection condensed={condensed!} colors={colors} />
+          <ContentReveal key={key} visible={true} delay={delay}>
+            <FallbackSpecsSection rows={profileSpecRows} colors={colors} />
           </ContentReveal>
         );
 

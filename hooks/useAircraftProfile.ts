@@ -87,7 +87,7 @@ export function useAircraftProfile(registration: string | undefined) {
     profile: phase1.data,
     condensed: phase2.data?.condensed,
     relationships: phase3.data ?? phase2.data?.relationships,
-    pictures: phase2.data?.pictures ?? phase1.data?.pictures,
+    pictures: (phase2.data?.pictures?.length ? phase2.data.pictures : null) ?? phase1.data?.pictures,
 
     phase1Status,
     phase2Status,
