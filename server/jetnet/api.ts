@@ -54,17 +54,58 @@ export async function getFlightDataPaged(
     return `${mm}/${dd}/${yyyy}`;
   };
 
-  return jetnetRequest(
-    "POST",
-    `/api/Aircraft/getFlightDataPaged/{apiToken}/100/1`,
-    session,
-    {
-      aclist: [aircraftId],
-      modlist: [],
-      startdate: startDate || formatDate(oneYearAgo),
-      enddate: endDate || formatDate(now),
+  const sd = startDate || formatDate(oneYearAgo);
+  const ed = endDate || formatDate(now);
+  const pageSize = 100;
+  const maxPages = 5;
+  let allRecords: any[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const result = await jetnetRequest(
+      "POST",
+      `/api/Aircraft/getFlightDataPaged/{apiToken}/${pageSize}/${page}`,
+      session,
+      {
+        aclist: [aircraftId],
+        modlist: [],
+        startdate: sd,
+        enddate: ed,
+      }
+    );
+
+    const resultAny = result as any;
+    let pageItems: any[] = [];
+
+    const tryKeys = [
+      "flightdataresult", "FlightDataResult",
+      "flights", "flightdata", "FlightData",
+      "result", "Result", "data", "Data",
+    ];
+    for (const key of tryKeys) {
+      if (Array.isArray(resultAny[key])) {
+        pageItems = resultAny[key];
+        break;
+      }
     }
-  );
+    if (pageItems.length === 0 && !Array.isArray(resultAny)) {
+      for (const key of Object.keys(resultAny)) {
+        if (Array.isArray(resultAny[key]) && resultAny[key].length > 0) {
+          pageItems = resultAny[key];
+          break;
+        }
+      }
+    }
+    if (Array.isArray(resultAny)) {
+      pageItems = resultAny;
+    }
+
+    allRecords = allRecords.concat(pageItems);
+    console.log(`[flight-paging] page=${page} items=${pageItems.length} total=${allRecords.length}`);
+
+    if (pageItems.length < pageSize) break;
+  }
+
+  return { flightdataresult: allRecords };
 }
 
 export async function getHistoryListPaged(

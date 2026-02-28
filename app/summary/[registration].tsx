@@ -40,6 +40,7 @@ export default function SummaryScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingSteps, setLoadingSteps] = useState<LoadingStep[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [noFlightData, setNoFlightData] = useState(false);
 
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
 
@@ -99,6 +100,7 @@ export default function SummaryScreen() {
     setActiveMode("flight");
     setLoading(true);
     setError(null);
+    setNoFlightData(false);
     setFlightSummary(null);
     setFlightIntel(null);
     triggerHaptic();
@@ -136,6 +138,14 @@ export default function SummaryScreen() {
       }
 
       const data = await res.json();
+
+      if (data.message === "no-usable-flights" || data.fallbackTo === "standard-summary") {
+        setLoadingSteps((prev) => prev.map((s) => ({ ...s, done: true })));
+        setLoading(false);
+        setNoFlightData(true);
+        return;
+      }
+
       setLoadingSteps((prev) => prev.map((s) => ({ ...s, done: true })));
 
       const { flightIntelligence, ...summary } = data;
@@ -242,6 +252,41 @@ export default function SummaryScreen() {
               <Text style={[styles.retryText, { color: colors.text }]}>Back</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      ) : null}
+
+      {noFlightData ? (
+        <View style={[styles.noFlightBox, { backgroundColor: colors.surface }]}>
+          <Ionicons name="airplane-outline" size={28} color={colors.textSecondary} />
+          <Text style={[styles.noFlightTitle, { color: colors.text }]}>
+            No flight activity found
+          </Text>
+          <Text style={[styles.noFlightSubtext, { color: colors.textSecondary }]}>
+            Flight tracking data is not available for this aircraft in the past 12 months. This can happen with privately operated aircraft or aircraft with limited ADS-B coverage.
+          </Text>
+          <TouchableOpacity
+            style={[styles.generateButton, { backgroundColor: colors.tint, marginTop: 16 }]}
+            onPress={() => {
+              setNoFlightData(false);
+              setActiveMode(null);
+              handleGenerateInsight();
+            }}
+          >
+            <Ionicons name="flash" size={20} color="#FFFFFF" />
+            <View style={styles.buttonContent}>
+              <Text style={styles.generateText}>Generate AI Summary Instead</Text>
+              <Text style={styles.buttonSubtext}>Ownership, market, transactions</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryButton, { backgroundColor: colors.surfaceSecondary, marginTop: 8 }]}
+            onPress={() => {
+              setNoFlightData(false);
+              setActiveMode(null);
+            }}
+          >
+            <Text style={[styles.secondaryText, { color: colors.text }]}>Back to options</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -747,5 +792,22 @@ const styles = StyleSheet.create({
   secondaryText: {
     fontSize: 15,
     fontWeight: "500" as const,
+  },
+  noFlightBox: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: "center" as const,
+    gap: 8,
+  },
+  noFlightTitle: {
+    fontSize: 17,
+    fontWeight: "600" as const,
+    marginTop: 4,
+  },
+  noFlightSubtext: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center" as const,
+    maxWidth: 320,
   },
 });

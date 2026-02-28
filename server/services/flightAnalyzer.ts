@@ -24,23 +24,81 @@ export interface FlightIntelligence {
 }
 
 export function normalizeFlights(raw: Record<string, unknown>): FlightRecord[] {
-  const items = (raw as any)?.flightdataresult || (raw as any)?.flights || [];
-  if (!Array.isArray(items)) return [];
+  let items: any[] | null = null;
 
-  return items
+  if (Array.isArray(raw)) {
+    items = raw;
+  } else if (raw && typeof raw === "object") {
+    const tryKeys = [
+      "flightdataresult", "FlightDataResult",
+      "flights", "flightdata", "FlightData",
+      "result", "Result", "data", "Data",
+    ];
+    for (const key of tryKeys) {
+      if (Array.isArray((raw as any)[key])) {
+        items = (raw as any)[key];
+        break;
+      }
+    }
+    if (!items) {
+      for (const key of Object.keys(raw)) {
+        if (Array.isArray((raw as any)[key]) && (raw as any)[key].length > 0) {
+          console.log(`[flight-normalize] Using fallback array key: "${key}" (${(raw as any)[key].length} items)`);
+          items = (raw as any)[key];
+          break;
+        }
+      }
+    }
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    console.log(`[flight-normalize] No flight array found in response. Keys: ${raw ? Object.keys(raw).join(",") : "null"}`);
+    return [];
+  }
+
+  console.log(`[flight-normalize] Found ${items.length} raw flight records`);
+
+  const fallbackDate = new Date().toISOString().split("T")[0];
+  let droppedCount = 0;
+
+  const results = items
     .map((f: any) => {
-      const dateStr = f.flightdate || f.date || f.departuredate || "";
+      if (!f || typeof f !== "object") {
+        droppedCount++;
+        return null;
+      }
+
+      const dateStr = f.flightdate || f.date || f.departuredate || f.DepartureDate || f.FlightDate || "";
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return null;
+      const dateValue = isNaN(d.getTime()) ? fallbackDate : d.toISOString().split("T")[0];
+
+      const origin = (
+        f.departureairport || f.origin || f.departairport || f.depart ||
+        f.DepartureAirport || f.DepartAirport || f.dep || ""
+      ).toString().toUpperCase().trim();
+
+      const destination = (
+        f.arrivalairport || f.destination || f.arriveairport || f.arrive ||
+        f.ArrivalAirport || f.ArriveAirport || f.arr || ""
+      ).toString().toUpperCase().trim();
+
+      const hours = f.flighthours ?? f.FlightHours ?? f.flighttime ?? f.FlightTime ?? null;
 
       return {
-        date: d.toISOString().split("T")[0],
-        origin: (f.departureairport || f.origin || f.departairport || f.depart || "").toUpperCase().trim(),
-        destination: (f.arrivalairport || f.destination || f.arriveairport || f.arrive || "").toUpperCase().trim(),
-        flightHours: f.flighthours != null ? Number(f.flighthours) || null : null,
+        date: dateValue,
+        origin,
+        destination,
+        flightHours: hours != null ? Number(hours) || null : null,
       } as FlightRecord;
     })
     .filter(Boolean) as FlightRecord[];
+
+  if (droppedCount > 0) {
+    console.warn(`[flight-normalize] Dropped ${droppedCount} non-object records`);
+  }
+  console.log(`[flight-normalize] Normalized ${results.length}/${items.length} records`);
+
+  return results;
 }
 
 export function analyzeFlights(flights: FlightRecord[]): FlightIntelligence {

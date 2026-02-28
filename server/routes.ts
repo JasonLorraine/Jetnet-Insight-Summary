@@ -193,13 +193,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         const flightRaw = await getFlightDataPaged(profile.aircraftId, fresh);
+
+        const rawKeys = typeof flightRaw === "object" && flightRaw ? Object.keys(flightRaw) : [];
+        const firstArrayKey = rawKeys.find((k) => Array.isArray((flightRaw as any)[k]));
+        const rawArrayLen = firstArrayKey ? (flightRaw as any)[firstArrayKey]?.length : (Array.isArray(flightRaw) ? (flightRaw as any[]).length : 0);
+        console.log(`[flight-debug] REG=${req.params.registration} ACID=${profile.aircraftId} rawType=${typeof flightRaw} rawKeys=[${rawKeys.join(",")}] firstArrayKey=${firstArrayKey} rawArrayLen=${rawArrayLen}`);
+        if (rawArrayLen > 0 && firstArrayKey) {
+          console.log(`[flight-debug] sample:`, JSON.stringify((flightRaw as any)[firstArrayKey]?.slice(0, 2)).substring(0, 500));
+        }
+
         const flights = normalizeFlights(flightRaw);
+        console.log(`[flight-debug] normalizedLen=${flights.length} sample:`, flights.length > 0 ? JSON.stringify(flights.slice(0, 2)) : "[]");
+
         const intel = analyzeFlights(flights);
+        console.log(`[flight-debug] totalFlights=${intel.totalFlights} totalHours=${intel.totalHours}`);
 
         if (intel.totalFlights === 0) {
-          return res.status(404).json({
-            message:
-              "Flight activity unavailable for this aircraft. Try the standard AI summary instead.",
+          return res.json({
+            ok: true,
+            mode: "flight-ai",
+            flightsFound: rawArrayLen,
+            flightsUsable: flights.length,
+            message: "no-usable-flights",
+            fallbackTo: "standard-summary",
           });
         }
 
