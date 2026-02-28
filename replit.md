@@ -15,9 +15,10 @@ Aircraft sales intelligence mobile app built with React Native (Expo) and Expres
 3. **Owner Disposition Intelligence**: Sell probability (0-100) with archetype classification, brand loyalty, replacement cycle, fleet analysis, and contact accessibility scoring
 4. **Ownership Surface**: Company profile (type, HQ, industry), key contacts with role signals (Decision Maker / Influencer / Operational), horizontal fleet strip with deep navigation, Evolution company links
 5. **Aircraft Specs**: Full technical specifications via `getAircraft` endpoint — powerplant (engine model/count/program/APU), performance (range/speed/MTOW/fuel), cabin (seats/config/Wi-Fi/refurb), airframe (total time/landings/paint), avionics (suite/operation type); displayed in collapsible grouped layout
-6. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; summaries incorporate company profile and decision-maker accessibility
-7. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
-8. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
+6. **Contact Actions**: Tap-to-call, tap-to-text, tap-to-email on contact rows; uses native `tel:`, `sms:`, `mailto:` schemes with `Linking.canOpenURL` guards; pre-fills email subject and SMS body with aircraft registration
+7. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; summaries incorporate company profile and decision-maker accessibility
+8. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
+9. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
 
 ## Project Structure
 

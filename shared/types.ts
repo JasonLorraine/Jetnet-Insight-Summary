@@ -111,6 +111,7 @@ export interface Contact {
   title: string | null;
   email: string | null;
   phone: string | null;
+  mobilePhone: string | null;
   roleSignal: "Decision Maker" | "Influencer" | "Operational";
 }
 

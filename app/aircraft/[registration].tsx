@@ -252,7 +252,7 @@ export default function AircraftProfileScreen() {
                 Key Contacts ({profile.contacts.length})
               </Text>
               {profile.contacts.slice(0, 8).map((contact, i) => (
-                <ContactRow key={i} contact={contact} />
+                <ContactRow key={i} contact={contact} aircraftRegistration={profile.registration} />
               ))}
             </View>
           ) : null}

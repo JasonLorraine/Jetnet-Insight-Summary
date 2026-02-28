@@ -1,0 +1,327 @@
+Good — this is where the app stops being analysis and becomes **actionable workflow**.
+Right now you are generating intelligence, but brokers win deals when friction between **insight → outreach** is nearly zero.
+
+You need a **Contact Action Layer** built directly into the aircraft experience.
+
+Below is the **full implementation spec** for enabling **Email, Text, and Call** from contacts inside your iOS app.
+
+---
+
+# 📞 Contact Action System
+
+## Full Build Instructions (iOS Native)
+
+---
+
+# 1. Product Goal
+
+When a broker sees opportunity, they must be able to:
+
+✅ Call owner/operator immediately
+✅ Send email in 1 tap
+✅ Send SMS when appropriate
+
+No copying numbers.
+No switching apps manually.
+
+---
+
+# 2. Data Requirement (Backend)
+
+You already pull contacts via:
+
+```id="4zrq0p"
+/getContactList
+```
+
+You must normalize response into:
+
+```id="w0ue24"
+Contact {
+  contactId
+  firstName
+  lastName
+  title
+  companyName
+  email
+  phone
+  mobilePhone
+  role
+}
+```
+
+---
+
+## IMPORTANT
+
+Add normalization layer:
+
+```id="s3ip2j"
+/services/mappers/contactMapper.ts
+```
+
+Purpose:
+
+* remove nulls
+* standardize phone format
+* validate email
+
+---
+
+# 3. UI Placement
+
+Create new section:
+
+```id="mruyj5"
+Owner & Key Contacts
+```
+
+Location:
+👉 Immediately below Broker Insight Card.
+
+Reason:
+Broker reads insight → acts instantly.
+
+---
+
+## Contact Card Layout
+
+Each contact appears as:
+
+```
+[ Avatar ]  John Smith
+             Director of Aviation
+             ABC Holdings
+
+[ Call ] [ Text ] [ Email ]
+```
+
+---
+
+# 4. iOS Native Actions (Critical)
+
+DO NOT build custom dialers or mailers.
+
+Use Apple system handlers.
+
+---
+
+## 4.1 Call Contact
+
+### Implementation
+
+```id="1r9o4o"
+import { Linking } from 'react-native';
+
+Linking.openURL(`tel:${phoneNumber}`);
+```
+
+### Behavior
+
+* Opens native Phone app
+* Pre-fills number
+* User confirms call
+
+---
+
+## 4.2 Send Text Message
+
+```id="15v7s1"
+Linking.openURL(`sms:${mobilePhone}`);
+```
+
+Optional (recommended later):
+Pre-fill message:
+
+```id="xk98ok"
+sms:${mobile}?body=Regarding your aircraft...
+```
+
+---
+
+## 4.3 Send Email
+
+```id="qlgyub"
+Linking.openURL(`mailto:${email}`);
+```
+
+Pre-fill subject:
+
+```id="c2r4o0"
+mailto:${email}?subject=Regarding Your Aircraft
+```
+
+---
+
+# 5. Smart Broker Enhancements (HIGH VALUE)
+
+## 5.1 AI Draft Outreach (Recommended)
+
+Add button:
+
+```
+Generate Outreach Message
+```
+
+Creates email text using broker narrative.
+
+AI Prompt:
+
+```id="sccg97"
+Write a professional aircraft outreach message
+based on broker intelligence insight.
+Tone: consultative, not salesy.
+```
+
+User edits before sending.
+
+---
+
+## 5.2 Contact Priority Ranking
+
+Add scoring:
+
+```id="0shh13"
+PRIMARY DECISION MAKER
+INFLUENCER
+OPERATIONS CONTACT
+```
+
+Broker sees who to call first.
+
+---
+
+# 6. Permissions Required (iOS)
+
+Add to Info.plist:
+
+```id="1jgb2n"
+LSApplicationQueriesSchemes:
+tel
+sms
+mailto
+```
+
+No special privacy permissions required since system apps open externally.
+
+---
+
+# 7. Safety Handling
+
+If data missing:
+
+### Hide buttons dynamically:
+
+```id="8j82tu"
+if (!phone) hide Call
+if (!mobile) hide Text
+if (!email) hide Email
+```
+
+Never show disabled buttons.
+
+---
+
+# 8. UX Details (Apple-Level)
+
+### Button Style
+
+* Icon only
+* Circular
+* 44pt minimum tap target
+* Subtle haptic feedback
+
+Icons:
+
+* Phone
+* Message
+* Envelope
+
+---
+
+### Interaction
+
+Tap → immediate action.
+
+No confirmation dialogs inside app.
+
+---
+
+# 9. Engineering File Changes
+
+## New Components
+
+```id="92flp1"
+/components/ContactCard.tsx
+/components/ContactActionButtons.tsx
+```
+
+---
+
+## New Hook
+
+```id="6d11m7"
+/hooks/useContactActions.ts
+```
+
+Handles:
+
+* formatting
+* validation
+* action launching
+
+---
+
+# 10. Performance Rule
+
+Contacts load asynchronously after aircraft data.
+
+Broker Insight must NEVER wait on contacts.
+
+---
+
+# 11. Future Expansion (Design Now)
+
+Architecture should allow later:
+
+✅ CRM push (HubSpot / Salesforce)
+✅ Log outreach activity
+✅ Track follow-ups
+✅ Contact engagement scoring
+
+---
+
+# 12. Acceptance Criteria
+
+Feature complete when:
+
+✅ Broker can call within 1 tap
+✅ Email opens pre-filled
+✅ Text launches instantly
+✅ No copy/paste required
+✅ Contact appears tied to aircraft context
+
+---
+
+# 13. Why This Is Critical
+
+Right now your app answers:
+
+> “This aircraft is interesting.”
+
+After this feature it answers:
+
+> **“Here’s who to call — do it now.”**
+
+That transition is what makes brokers keep the app open all day.
+
+---
+
+## Next (Strong Recommendation)
+
+The next upgrade — and this is where products become addictive:
+
+👉 **“Call Timing Intelligence”**
+Automatically highlight *which contact* is most likely reachable based on behavior patterns and role.
+
+That’s when this becomes a true deal engine.

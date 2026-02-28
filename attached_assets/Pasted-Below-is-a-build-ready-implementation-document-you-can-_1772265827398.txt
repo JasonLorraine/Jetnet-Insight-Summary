@@ -1,0 +1,398 @@
+Below is a **build-ready implementation document** you can hand directly to engineering.
+This is written as a **product + architecture + UI execution spec**, not theory — meaning a dev team can implement without interpretation.
+
+---
+
+# ✈️ Broker Intelligence Engine
+
+## Full Implementation Instructions
+
+**Project:** Jetnet Insight Summary (iOS)
+**Feature Name:** Broker Mode / Deal Intelligence Layer
+**Objective:** Convert aircraft data into transaction intelligence brokers can act on immediately.
+
+---
+
+# 1. Product Goal (Non-Negotiable)
+
+The app must answer within **5 seconds**:
+
+> “Should I call this owner?”
+
+Everything below exists to compute and present that answer.
+
+---
+
+# 2. High-Level Architecture
+
+You are adding a **third analyzer layer**.
+
+Current:
+
+```id="oqie3p"
+Aircraft Data → AI Summary
+Flight Data → Flight Analyzer
+```
+
+New:
+
+```id="nmqv9d"
+Aircraft Data
+Flight Analyzer Output
+Model Trends
+Ownership History
+Transaction Data
+        ↓
+BROKER ANALYZER
+        ↓
+Broker Intelligence UI
+```
+
+---
+
+# 3. New Service Layer
+
+Create:
+
+```id="4ld69d"
+/services/analyzers/brokerAnalyzer.ts
+```
+
+---
+
+## brokerAnalyzer Responsibilities
+
+Aggregate signals and produce broker-facing intelligence.
+
+### Inputs
+
+```id="nhghx3"
+aircraftProfile
+ownerHistory
+flightAnalysis
+modelTrendData
+transactionHistory
+```
+
+### Output Object
+
+```id="pqpj8s"
+{
+  sellabilityScore: number (0-100),
+  opportunityScore: number (0-100),
+  ownerPersona: string,
+  pricingPressure: "LOW" | "MEDIUM" | "HIGH",
+  dealFriction: number (0-100),
+  predictedSellerWindow: string,
+  brokerNarrative: string
+}
+```
+
+---
+
+# 4. Signal Computation Rules
+
+## 4.1 Sellability Score
+
+Weighted model:
+
+```id="3re67a"
+30% flight activity trend
+25% ownership duration
+20% model demand trend
+15% transaction comps
+10% inventory pressure
+```
+
+### Example Logic
+
+```id="5ah78a"
+if activityTrend declining → +15
+if ownership > 5 years → +20
+if model trend rising → +15
+```
+
+---
+
+## 4.2 Opportunity Score
+
+Detect pre-listing behavior.
+
+Signals:
+
+* Reduced utilization
+* Increased repositioning flights
+* Long ownership
+* Model in active transaction cycle
+
+```id="rzgxmm"
+score = behavioralSignals + marketTiming
+```
+
+---
+
+## 4.3 Owner Persona Classification
+
+Create classifier:
+
+```id="t3bfls"
+CORPORATE
+ENTREPRENEURIAL
+CHARTER
+FRACTIONAL_EXIT
+INVESTMENT_OWNER
+UNKNOWN
+```
+
+### Detection Rules
+
+* Fleet size >1 → corporate
+* High utilization → charter
+* Single aircraft + long ownership → entrepreneur
+
+---
+
+## 4.4 Pricing Pressure
+
+Derived from:
+
+```id="o1m2ri"
+ownershipLength
+utilizationTrend
+marketTrendDirection
+```
+
+Logic:
+
+```id="s8g1ep"
+long ownership + declining usage = HIGH pressure
+```
+
+---
+
+## 4.5 Deal Friction Score
+
+Start at 100 → subtract risk.
+
+Subtract for:
+
+* unstable base airport
+* complex operating regions
+* inconsistent utilization
+* ownership transfers
+
+---
+
+## 4.6 Seller Window Prediction
+
+Rules:
+
+```id="a31v8r"
+declining flights + inspection cycle + ownership age
+→ "3–9 months"
+```
+
+Return bucketed ranges only.
+
+---
+
+# 5. AI Narrative Generator
+
+Create:
+
+```id="3frd2n"
+/ai/prompts/brokerNarrativePrompt.ts
+```
+
+---
+
+### System Prompt
+
+```id="csxbhp"
+You are a senior business aircraft broker.
+Provide actionable deal intelligence.
+Be concise and commercially focused.
+```
+
+---
+
+### Input Payload
+
+```id="iw07b3"
+Sellability: 78
+Opportunity: 82
+Owner Persona: Corporate
+Flight Trend: Declining
+Ownership: 7.2 years
+Model Demand: Rising
+```
+
+---
+
+### Required Output
+
+Plain English paragraph broker can reuse in outreach.
+
+---
+
+# 6. UI Implementation (iOS)
+
+## Add New Top Section
+
+### Component
+
+```id="yshceh"
+/components/BrokerInsightCard.tsx
+```
+
+---
+
+## Screen Order (Critical)
+
+1. **Broker Insight (NEW)**
+2. Aircraft Hero
+3. AI Summary
+4. Flight Intelligence
+5. Market Data
+
+Broker insight must load FIRST.
+
+---
+
+## Broker Insight Card Layout
+
+### Header
+
+```id="7qaqt6"
+BROKER INSIGHT
+```
+
+---
+
+### Main Display
+
+Large typography:
+
+```id="0w5vax"
+SELLABILITY: HIGH
+Opportunity Score: 82
+Likely Seller Window: 6–12 Months
+```
+
+---
+
+### Sub Cards
+
+* Owner Persona
+* Pricing Pressure
+* Deal Friction
+
+---
+
+### Narrative Section
+
+AI-generated broker summary.
+
+---
+
+# 7. Interaction Behavior
+
+When aircraft loads:
+
+```id="j2ewpw"
+runFlightAnalyzer()
+runBrokerAnalyzer()
+renderBrokerCardImmediately()
+```
+
+Broker insight should appear progressively.
+
+---
+
+# 8. Loading Experience
+
+Replace spinner with staged feedback:
+
+```id="l1ywj2"
+Analyzing ownership…
+Evaluating market position…
+Detecting transaction signals…
+```
+
+---
+
+# 9. Performance Requirements
+
+| Stage            | Target |
+| ---------------- | ------ |
+| Analyzer compute | <300ms |
+| AI narrative     | <6 sec |
+| UI first render  | <1 sec |
+
+---
+
+# 10. Caching
+
+Broker analysis cached:
+
+```id="1b6yx4"
+key = regnbr + broker_v1
+TTL = 24 hours
+```
+
+---
+
+# 11. Developer Workflow
+
+### Step Order
+
+1. Implement brokerAnalyzer.ts
+2. Add scoring utilities
+3. Build BrokerInsightCard
+4. Add AI narrative generator
+5. Hook into aircraft load lifecycle
+6. Add caching layer
+
+---
+
+# 12. Acceptance Criteria
+
+Engineering is done when:
+
+✅ Opening aircraft immediately shows broker insight
+✅ Broker can understand opportunity without scrolling
+✅ No raw datasets required to interpret
+✅ Narrative readable in outreach email
+
+---
+
+# 13. Product Outcome
+
+Before:
+
+> Aircraft research tool
+
+After:
+
+> Deal discovery engine
+
+---
+
+# 14. Strategic Note (Important)
+
+This feature turns your app into something brokers do **daily**, not occasionally.
+
+You are no longer competing with:
+
+* databases
+* trackers
+* spec viewers
+
+You are competing with **broker instinct** — and augmenting it.
+
+---
+
+If you want next, I can give you the **most important missing piece** that almost nobody builds:
+
+👉 **“Why Now?” detection logic**
+(the trigger that makes brokers actually initiate contact).

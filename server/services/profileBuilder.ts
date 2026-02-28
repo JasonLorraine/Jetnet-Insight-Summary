@@ -169,11 +169,14 @@ function extractContacts(data: Record<string, unknown>): Contact[] {
       if (!name) return null;
 
       const title = c.title || c.contacttitle || null;
+      const mobile = c.mobile || c.mobilephone || c.cellphone || null;
+      const office = c.office || c.phone || c.officephone || c.directphone || null;
       return {
         contactName: name,
         title,
         email: c.email || c.contactemail || null,
-        phone: c.office || c.mobile || c.phone || null,
+        phone: office || mobile || null,
+        mobilePhone: mobile || null,
         roleSignal: classifyContactRole(title),
       } as Contact;
     })
