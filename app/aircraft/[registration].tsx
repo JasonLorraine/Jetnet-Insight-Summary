@@ -10,7 +10,7 @@ import {
   Platform,
   Animated,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -32,6 +32,7 @@ export default function AircraftProfileScreen() {
   const colors = useThemeColors(colorScheme);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { addRecentSearch } = useAuth();
   const { personaId } = usePersona();
 
@@ -99,7 +100,7 @@ export default function AircraftProfileScreen() {
 
   if (isPhase1Loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === "web" ? webTopInset : insets.top }]}>
         <ProfileSkeleton />
       </View>
     );
@@ -111,7 +112,7 @@ export default function AircraftProfileScreen() {
         style={[
           styles.container,
           styles.errorContainer,
-          { backgroundColor: colors.background },
+          { backgroundColor: colors.background, paddingTop: Platform.OS === "web" ? webTopInset : insets.top },
         ]}
       >
         <Ionicons
@@ -145,26 +146,34 @@ export default function AircraftProfileScreen() {
           {
             backgroundColor: colors.surface,
             borderBottomColor: colors.separator,
-            paddingTop: Platform.OS === "web" ? webTopInset : 0,
+            paddingTop: Platform.OS === "web" ? webTopInset : insets.top,
           },
         ]}
       >
-        <Text
-          style={[styles.headerRegistration, { color: colors.text }]}
-          numberOfLines={1}
-        >
-          {profile.registration}
-        </Text>
-        <Text
-          style={[
-            styles.headerModel,
-            { color: colors.secondaryLabel },
-          ]}
-          numberOfLines={1}
-        >
-          {profile.yearMfr} {profile.make} {profile.model}
-          {profile.series ? ` ${profile.series}` : ""}
-        </Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.tint} />
+          </TouchableOpacity>
+          <View style={styles.headerText}>
+            <Text
+              style={[styles.headerRegistration, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {profile.registration}
+            </Text>
+            <Text
+              style={[styles.headerModel, { color: colors.secondaryLabel }]}
+              numberOfLines={1}
+            >
+              {profile.yearMfr} {profile.make} {profile.model}
+              {profile.series ? ` ${profile.series}` : ""}
+            </Text>
+          </View>
+        </View>
       </View>
 
       <ProfileTabs
@@ -252,8 +261,20 @@ const styles = StyleSheet.create({
   },
   stickyHeader: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 6,
+  },
+  backButton: {
+    marginRight: 4,
+    marginLeft: -8,
+  },
+  headerText: {
+    flex: 1,
   },
   headerRegistration: {
     fontSize: 22,

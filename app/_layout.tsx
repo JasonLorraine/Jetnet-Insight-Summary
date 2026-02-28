@@ -39,7 +39,7 @@ function RootLayoutNav() {
       <Stack.Screen name="search" options={{ headerShown: false }} />
       <Stack.Screen
         name="aircraft/[registration]"
-        options={{ title: "Aircraft Profile" }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="summary/[registration]"
