@@ -1,0 +1,238 @@
+Yes — this is a **real gap** in the current flow, especially for what you’re trying to accomplish with *Hot or Not / Insight Summary*. Right now the app evaluates an **aircraft**, but buyers, brokers, and OEM salespeople actually evaluate a **relationship graph**:
+
+> Aircraft → Company → Contacts → Decision Makers → Behavior
+
+So adding Company + Contact as a first-class surface is the correct move — not just extra data.
+
+Below is a clean implementation approach that will fit your existing repo architecture and feel intentional rather than bolted on.
+
+---
+
+# ✅ Recommended UX: Add a “Ownership” Tab (not just data fields)
+
+Do **not** bury this inside aircraft details.
+
+Create a top-level tab:
+
+```
+[ Overview ] [ Ownership ] [ Activity ] [ Market ] [ Prediction ]
+```
+
+### Why “Ownership” instead of “Company”?
+
+Because users mentally ask:
+
+> “Who actually controls this airplane?”
+
+Ownership communicates value immediately.
+
+---
+
+# 🧭 Ownership Tab Layout (Apple-level clarity)
+
+## Section 1 — Operating Entity (Company Card)
+
+Large summary card at top.
+
+**Display:**
+
+* Company Name
+* Operator vs Owner badge
+* Company Type (Corp / LLC / Fractional / Charter)
+* Headquarters (City, State, Country)
+* Fleet Size
+* Industry (if available)
+* Years owning aircraft
+* Brand loyalty indicator
+
+Example:
+
+```
+CM SR Aviation LLC
+Operator | Private LLC
+📍 White Plains, NY
+Fleet: 3 Aircraft
+JETNET Relationship Score: High
+Ownership Duration: 6.2 yrs
+```
+
+---
+
+## Section 2 — Fleet Context (Mini Fleet Strip)
+
+Horizontal scroll cards:
+
+```
+[G650ER]  [CJ3+]  [PC-12]
+Owned since 2021
+```
+
+Purpose:
+Users instantly understand sophistication level.
+
+---
+
+## Section 3 — Key Contacts (THIS is the money)
+
+Card list:
+
+| Name       | Title             | Role Signal         |
+| ---------- | ----------------- | ------------------- |
+| John Smith | Director Aviation | Decision Maker      |
+| Sarah Lee  | Chief Pilot       | Influencer          |
+| Mike Brown | CFO               | Financial Authority |
+
+Add icons:
+
+* 🟢 decision maker
+* 🟡 influencer
+* 🔵 operational
+
+---
+
+## Section 4 — Relationship Intelligence (NEW VALUE)
+
+Derived insights (AI generated):
+
+* Likely upgrade window: 12–24 months
+* Historical ownership pattern: trades every ~6 years
+* Brand preference: Gulfstream-heavy
+* Broker interaction likelihood: High
+
+This becomes your differentiator vs raw databases.
+
+---
+
+# ⚙️ Backend Workflow (How Data Loads)
+
+When user enters tail number:
+
+### Step 1 — Aircraft loads
+
+```
+getAircraftByRegNbr
+```
+
+Extract:
+
+```
+ACID
+COMPANYID
+```
+
+---
+
+### Step 2 — Company auto-fetch
+
+```
+GET /api/Company/getCompanyList
+Body:
+{
+  "companyid": COMPANYID
+}
+```
+
+Cache immediately.
+
+---
+
+### Step 3 — Contacts fetch
+
+```
+GET /api/Contact/getContactList
+Body:
+{
+  "companyid": COMPANYID
+}
+```
+
+---
+
+### Step 4 — Relationship Mapping (important)
+
+Use:
+
+* RELATIONSHIP
+* CONTACTID
+* COMPANYID
+* ACID
+
+Build internal graph object:
+
+```ts
+ownershipProfile = {
+  aircraft,
+  company,
+  contacts,
+  relationships
+}
+```
+
+---
+
+# 🎨 UI Behavior (Johnny-Ive Approved)
+
+## Progressive Fill Loading
+
+Ownership tab should **assemble itself**:
+
+1. Company card fades in
+2. Fleet cards slide left → right
+3. Contacts populate one-by-one
+4. AI insight text types in slowly
+
+Feels intelligent, not database-y.
+
+---
+
+# 🤖 AI Skill Upgrade (What Your Rating Engine Gains)
+
+Your scoring model should now include:
+
+| Factor             | Signal                  |
+| ------------------ | ----------------------- |
+| Fleet size         | sophistication          |
+| Ownership duration | sell timing             |
+| Contact seniority  | deal velocity           |
+| Brand loyalty      | OEM targeting           |
+| Company growth     | acquisition probability |
+
+This dramatically improves prediction accuracy.
+
+---
+
+# ⭐ Hidden Power Move (You should absolutely add this)
+
+Add button:
+
+```
+[ Open in Evolution → ]
+```
+
+Deep link using:
+
+```
+COMPANYID or ACID
+```
+
+Now your app becomes a **front door** to Evolution, not a replacement.
+
+JETNET leadership will love this positioning.
+
+---
+
+# 🧠 What You Were Missing (Strategically)
+
+Right now your app answers:
+
+> “Is this airplane interesting?”
+
+After this change it answers:
+
+> “Is this customer actionable?”
+
+That’s a sales intelligence product.
+
+---
+
+If you want next, I can design the **exact scoring logic** that merges Aircraft + Company + Contact into a single “Hot Score” — this is where the app becomes genuinely addictive for brokers and OEM teams.
