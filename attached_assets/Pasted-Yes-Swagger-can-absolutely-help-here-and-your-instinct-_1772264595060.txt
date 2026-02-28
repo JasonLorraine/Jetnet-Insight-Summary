@@ -1,0 +1,57 @@
+Yes — Swagger can absolutely help here, and your instinct is right: for “full spec detail,” you typically do a two-step:
+
+resolve the aircraft ID (ACID) from the reg number, then
+
+pull the full aircraft object (the “specs” payload) using getAircraft() (or the bulk version).
+
+The clean pattern
+
+A. Tail number → ACID
+
+Use an endpoint that searches by registration (commonly “get by regnbr” or an aircraft list filter by regnbr).
+
+Result should include ACID (and often ModelID too).
+
+B. ACID → full aircraft/spec object
+
+Call getAircraft() for the full aircraft object (this is the one you want for “full specs”).
+
+If you’re loading multiple aircraft at once, there’s also a bulk version added in 2025 that returns “the same functionality as getAircraft()” but takes an aclist.
+
+So in your app: getRegNbr → (ACID) → getAircraft is the right mental model.
+
+The Evolution link issue: you do need a security token for direct page calls
+
+Your raw link:
+
+https://evolution.jetnet.com/aircraft/25062
+
+…is not the supported deep-link pattern for embedding/jumping into Evolution from another app.
+
+JETNET’s own guidance: some API responses include a pageurl you can use, and Evolution detail pages require the security token as a URL parameter for that type of “direct page call.”
+
+Example aircraft page format they publish:
+
+https://www.jetnetevolution.com/DisplayAircraftDetail.aspx?acid=[ACID]&securityToken=[TOKEN]
+
+What you should do in Jetnet-Insight-Summary
+
+Do not hardcode https://evolution.jetnet.com/aircraft/{id}.
+
+Instead:
+
+Prefer the pageurl returned by your getAircraft / getCompany / getContact calls (when present).
+
+Or construct the URL in the published format using ACID + your securityToken.
+
+What to change in your workflow (practical)
+
+In the “Hot or Not” detail page loader:
+
+Call registration search → capture ACID
+
+Call getAircraft(ACID) → use that payload for full specs
+
+For “Open in Evolution” button:
+
+Use returned pageurl, or build DisplayAircraftDetail.aspx?...&securityToken=...

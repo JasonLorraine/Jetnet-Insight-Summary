@@ -85,7 +85,7 @@ server/
 ## Environment Variables
 
 - `JETNET_EMAIL`, `JETNET_PASSWORD` — For MCP server (server-side JETNET auth)
-- `EVOLUTION_BASE_URL` — Evolution deep link base (default: https://evolution.jetnet.com)
+- `EVOLUTION_BASE_URL` — Evolution deep link base (default: https://www.jetnetevolution.com)
 - `SESSION_SECRET` — Express session secret
 
 ## Dependencies

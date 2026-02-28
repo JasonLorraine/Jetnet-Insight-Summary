@@ -9,7 +9,7 @@ import {
   getCompanyList,
   getContactList,
 } from "../jetnet/api";
-import { buildEvolutionLink } from "./evolutionLink";
+import { buildEvolutionAircraftLink, buildEvolutionCompanyLink } from "./evolutionLink";
 import { computeHotNotScore } from "./scoring";
 import { computeDisposition } from "./disposition";
 import { fetchModelTrends } from "./modelTrends";
@@ -178,12 +178,12 @@ function extractContacts(data: Record<string, unknown>): Contact[] {
     .filter(Boolean) as Contact[];
 }
 
-function extractCompanyProfile(data: Record<string, unknown>, companyId: number): CompanyProfile | null {
+function extractCompanyProfile(data: Record<string, unknown>, companyId: number, securityToken: string): CompanyProfile | null {
   const items = (data as any)?.companylistresult || (data as any)?.companies || [];
   const company = Array.isArray(items) ? items[0] : null;
   if (!company) return null;
 
-  const EVOLUTION_BASE_URL = process.env.EVOLUTION_BASE_URL || "https://evolution.jetnet.com";
+  const pageUrl = company.pageurl || company.pageUrl || null;
 
   return {
     companyId,
@@ -195,31 +195,33 @@ function extractCompanyProfile(data: Record<string, unknown>, companyId: number)
       country: company.country || null,
     },
     industry: company.industry || company.siccode || null,
-    evolutionLink: `${EVOLUTION_BASE_URL}/company/${companyId}`,
+    evolutionLink: buildEvolutionCompanyLink(companyId, securityToken, pageUrl),
   };
 }
 
-function extractFleetAircraft(data: Record<string, unknown>, currentAircraftId: number): FleetAircraft[] {
+function extractFleetAircraft(data: Record<string, unknown>, currentAircraftId: number, securityToken: string): FleetAircraft[] {
   const items = (data as any)?.fleetresult || (data as any)?.fleet || [];
   if (!Array.isArray(items)) return [];
-
-  const EVOLUTION_BASE_URL = process.env.EVOLUTION_BASE_URL || "https://evolution.jetnet.com";
 
   return items
     .filter((ac: any) => {
       const id = ac.aircraftid || ac.aircraftId;
       return id && id !== currentAircraftId;
     })
-    .map((ac: any) => ({
-      registration: ac.regnbr || ac.registration || "N/A",
-      aircraftId: ac.aircraftid || ac.aircraftId,
-      make: ac.make || "Unknown",
-      model: ac.model || "Unknown",
-      yearMfr: ac.yearmfr || 0,
-      serialNumber: ac.serialnbr || ac.sernbr || "",
-      forSale: ac.forsale === true || ac.forsale === "Y" || String(ac.forsale).toLowerCase() === "y",
-      evolutionLink: `${EVOLUTION_BASE_URL}/aircraft/${ac.aircraftid || ac.aircraftId}`,
-    }))
+    .map((ac: any) => {
+      const acId = ac.aircraftid || ac.aircraftId;
+      const pageUrl = ac.pageurl || ac.pageUrl || null;
+      return {
+        registration: ac.regnbr || ac.registration || "N/A",
+        aircraftId: acId,
+        make: ac.make || "Unknown",
+        model: ac.model || "Unknown",
+        yearMfr: ac.yearmfr || 0,
+        serialNumber: ac.serialnbr || ac.sernbr || "",
+        forSale: ac.forsale === true || ac.forsale === "Y" || String(ac.forsale).toLowerCase() === "y",
+        evolutionLink: buildEvolutionAircraftLink(acId, securityToken, pageUrl),
+      };
+    })
     .slice(0, 20);
 }
 
@@ -304,7 +306,7 @@ export async function buildAircraftProfile(
 
   const companyProfile: CompanyProfile | null =
     companyData.status === "fulfilled" && ownerCompanyId
-      ? extractCompanyProfile(companyData.value, ownerCompanyId)
+      ? extractCompanyProfile(companyData.value, ownerCompanyId, session.apiToken)
       : null;
 
   const contacts: Contact[] =
@@ -314,7 +316,7 @@ export async function buildAircraftProfile(
 
   const fleetAircraft: FleetAircraft[] =
     fleetData.status === "fulfilled"
-      ? extractFleetAircraft(fleetData.value, aircraftId)
+      ? extractFleetAircraft(fleetData.value, aircraftId, session.apiToken)
       : [];
 
   const profile: AircraftProfile = {
@@ -347,7 +349,7 @@ export async function buildAircraftProfile(
     history,
     ownerIntelligence: null,
     hotNotScore: null,
-    evolutionLink: buildEvolutionLink(aircraftId),
+    evolutionLink: buildEvolutionAircraftLink(aircraftId, session.apiToken, ac.pageurl || ac.pageUrl || null),
     estimatedAFTT: ac.estaftt || null,
   };
 
