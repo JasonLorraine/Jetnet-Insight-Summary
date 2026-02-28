@@ -11,12 +11,13 @@ Aircraft sales intelligence mobile app built with React Native (Expo) and Expres
 ## Key Features
 
 1. **JETNET Integration**: Session-managed authentication with auto-refresh, parallel data fetching (Golden Path), automatic re-login on 401 (stored credentials)
-2. **Hot/Not Scoring**: Deterministic 0-100 score with 8 weighted factors (liquidity, model market momentum, DOM, age, transactions, utilization, ownership, completeness)
+2. **Hot/Not Scoring**: Deterministic 0-100 score with 9 weighted factors (liquidity, model market momentum, DOM, age, transactions, utilization, ownership, completeness, contact accessibility)
 3. **Owner Disposition Intelligence**: Sell probability (0-100) with archetype classification, brand loyalty, replacement cycle, fleet analysis, and contact accessibility scoring
 4. **Ownership Surface**: Company profile (type, HQ, industry), key contacts with role signals (Decision Maker / Influencer / Operational), horizontal fleet strip with deep navigation, Evolution company links
-5. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; summaries incorporate company profile and decision-maker accessibility
-6. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
-7. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
+5. **Aircraft Specs**: Full technical specifications via `getAircraft` endpoint — powerplant (engine model/count/program/APU), performance (range/speed/MTOW/fuel), cabin (seats/config/Wi-Fi/refurb), airframe (total time/landings/paint), avionics (suite/operation type); displayed in collapsible grouped layout
+6. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; summaries incorporate company profile and decision-maker accessibility
+7. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
+8. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
 
 ## Project Structure
 
@@ -39,6 +40,7 @@ components/                   # Reusable UI components
   CompanyCard.tsx             # Operating entity card (company profile + Evolution link)
   ContactRow.tsx              # Contact row with role signal badge
   FleetItem.tsx               # Fleet list row item (supports horizontal scroll)
+  SpecsSection.tsx            # Aircraft specs display (collapsible groups)
   SkeletonLoader.tsx          # Loading skeleton shimmer
   SummaryCard.tsx             # AI summary display
   ErrorBoundary.tsx           # Error boundary component
@@ -71,6 +73,18 @@ server/
   mcp/
     server.ts                 # MCP server with tools and prompts
 ```
+
+## Profile Screen Layout
+
+Section order follows human-question headers (Apple-style):
+1. **AircraftCard** — Hero (registration, make/model, Hot/Not pill)
+2. **"Will it sell?"** — Hot/Not Score + scoring factors
+3. **"Who owns this?"** — Owner/operator names (large, prominent), CompanyCard, fleet strip, key contacts
+4. **"What is it?"** — SpecsSection (powerplant, performance, cabin, airframe, avionics)
+5. **"Is it active?"** — Market signals + utilization combined
+6. **"What's the market?"** — Model trends / market momentum
+7. **Owner Intelligence** — Disposition deep-dive
+8. **AI Summary** button
 
 ## API Endpoints
 

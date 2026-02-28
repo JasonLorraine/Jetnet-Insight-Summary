@@ -125,6 +125,27 @@ export interface ModelTrendSignals {
   marketHeatLabel: "Strong" | "Moderate" | "Weak";
 }
 
+export interface AircraftSpecs {
+  engineModel: string | null;
+  engineCount: number | null;
+  engineProgram: string | null;
+  apuModel: string | null;
+  rangeNm: number | null;
+  maxSpeed: number | null;
+  mtow: number | null;
+  fuelCapacity: number | null;
+  cabinSeats: number | null;
+  cabinConfig: string | null;
+  avionicsSuite: string | null;
+  wifiEquipped: boolean | null;
+  totalLandings: number | null;
+  lastIntRefurb: string | null;
+  lastExtPaint: string | null;
+  operationType: string | null;
+  certificate: string | null;
+  noiseStage: string | null;
+}
+
 export interface AircraftProfile {
   registration: string;
   aircraftId: number;
@@ -155,6 +176,7 @@ export interface AircraftProfile {
   history: HistoryEntry[];
   ownerIntelligence: OwnerIntelligence | null;
   hotNotScore: HotNotScore | null;
+  specs: AircraftSpecs | null;
   evolutionLink: string;
   estimatedAFTT: number | null;
 }

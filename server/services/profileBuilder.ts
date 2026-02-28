@@ -1,6 +1,7 @@
 import type { SessionState } from "../jetnet/session";
 import {
   lookupByRegistration,
+  getAircraft,
   getPictures,
   getRelationships,
   getFlightDataPaged,
@@ -15,6 +16,7 @@ import { computeDisposition } from "./disposition";
 import { fetchModelTrends } from "./modelTrends";
 import type {
   AircraftProfile,
+  AircraftSpecs,
   Relationship,
   AircraftPicture,
   HistoryEntry,
@@ -199,6 +201,50 @@ function extractCompanyProfile(data: Record<string, unknown>, companyId: number,
   };
 }
 
+function extractSpecs(data: Record<string, unknown>): AircraftSpecs | null {
+  const ac = (data as any)?.aircraftresult || data;
+  if (!ac) return null;
+
+  const toNum = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+
+  const toBool = (v: unknown): boolean | null => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "boolean") return v;
+    const s = String(v).toLowerCase();
+    if (s === "y" || s === "yes" || s === "true" || s === "1") return true;
+    if (s === "n" || s === "no" || s === "false" || s === "0") return false;
+    return null;
+  };
+
+  const specs: AircraftSpecs = {
+    engineModel: ac.enginemodel || ac.enginemake || ac.engmodel || null,
+    engineCount: toNum(ac.numberofengines || ac.enginecount || ac.nbrofengines),
+    engineProgram: ac.engineprogram || ac.engprogram || null,
+    apuModel: ac.apumodel || ac.apu || null,
+    rangeNm: toNum(ac.range || ac.rangefull || ac.maxrange),
+    maxSpeed: toNum(ac.maxspeed || ac.highspeed || ac.cruisespeed),
+    mtow: toNum(ac.mtow || ac.maxrampwt || ac.maxtakeoffweight),
+    fuelCapacity: toNum(ac.fuelcapacity || ac.maxfuel),
+    cabinSeats: toNum(ac.seatcapacity || ac.paxseats || ac.cabinseats || ac.seats),
+    cabinConfig: ac.cabinconfig || ac.interiorconfig || ac.interiordescription || null,
+    avionicsSuite: ac.avionics || ac.avionicssuite || ac.cockpitavionics || null,
+    wifiEquipped: toBool(ac.wifi || ac.wifiequipped || ac.wifionboard),
+    totalLandings: toNum(ac.totallandings || ac.landings || ac.cycles),
+    lastIntRefurb: ac.lastintrefurb || ac.interiorrefurb || ac.intrefurbyear || null,
+    lastExtPaint: ac.lastextpaint || ac.extpaint || ac.extpaintyear || null,
+    operationType: ac.operationtype || ac.optype || ac.part135 || null,
+    certificate: ac.certificate || ac.typecertificate || null,
+    noiseStage: ac.noisestage || ac.noise || null,
+  };
+
+  const hasAny = Object.values(specs).some((v) => v !== null);
+  return hasAny ? specs : null;
+}
+
 function extractFleetAircraft(data: Record<string, unknown>, currentAircraftId: number, securityToken: string): FleetAircraft[] {
   const items = (data as any)?.fleetresult || (data as any)?.fleet || [];
   if (!Array.isArray(items)) return [];
@@ -256,6 +302,7 @@ export async function buildAircraftProfile(
     companyData,
     contactsData,
     fleetData,
+    fullAircraftData,
   ] = await Promise.allSettled([
     getPictures(aircraftId, session),
     getRelationships(aircraftId, session),
@@ -265,6 +312,7 @@ export async function buildAircraftProfile(
     ownerCompanyId ? getCompanyList(ownerCompanyId, session) : Promise.reject("no companyId"),
     ownerCompanyId ? getContactList(ownerCompanyId, session) : Promise.reject("no companyId"),
     ownerCompanyName ? searchFleetByCompany(ownerCompanyName, session) : Promise.reject("no companyName"),
+    getAircraft(aircraftId, session),
   ]);
 
   const pictures =
@@ -319,6 +367,21 @@ export async function buildAircraftProfile(
       ? extractFleetAircraft(fleetData.value, aircraftId, session.apiToken)
       : [];
 
+  let specs: AircraftSpecs | null = null;
+  if (fullAircraftData.status === "fulfilled") {
+    specs = extractSpecs(fullAircraftData.value);
+    const fullAc = (fullAircraftData.value as any)?.aircraftresult || fullAircraftData.value;
+    if (fullAc?.pageurl || fullAc?.pageUrl) {
+      ac.pageurl = fullAc.pageurl || fullAc.pageUrl;
+    }
+    if (!ac.estaftt && fullAc?.estaftt) {
+      ac.estaftt = Number(fullAc.estaftt) || null;
+    }
+  }
+  if (!specs) {
+    specs = extractSpecs({ aircraftresult: ac });
+  }
+
   const profile: AircraftProfile = {
     registration: ac.regnbr || registration,
     aircraftId,
@@ -349,8 +412,9 @@ export async function buildAircraftProfile(
     history,
     ownerIntelligence: null,
     hotNotScore: null,
+    specs,
     evolutionLink: buildEvolutionAircraftLink(aircraftId, session.apiToken, ac.pageurl || ac.pageUrl || null),
-    estimatedAFTT: ac.estaftt || null,
+    estimatedAFTT: Number(ac.estaftt) || null,
   };
 
   profile.hotNotScore = computeHotNotScore(profile);

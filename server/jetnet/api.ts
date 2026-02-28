@@ -140,6 +140,17 @@ export async function getContactList(
   );
 }
 
+export async function getAircraft(
+  aircraftId: number,
+  session: SessionState
+): Promise<Record<string, unknown>> {
+  return jetnetRequest(
+    "GET",
+    `/api/Aircraft/getAircraft/${aircraftId}/{apiToken}`,
+    session
+  );
+}
+
 export async function getMarketTrends(
   modelId: number,
   session: SessionState

@@ -8,6 +8,7 @@ import {
   RefreshControl,
   useColorScheme,
   Platform,
+  Linking,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +25,7 @@ import { OwnerCard } from "@/components/OwnerCard";
 import { CompanyCard } from "@/components/CompanyCard";
 import { ContactRow } from "@/components/ContactRow";
 import { FleetItem } from "@/components/FleetItem";
+import { SpecsSection } from "@/components/SpecsSection";
 import { ProfileSkeleton } from "@/components/SkeletonLoader";
 import type { AircraftProfile, ModelTrendSignals } from "@/shared/types";
 
@@ -82,6 +84,19 @@ export default function AircraftProfileScreen() {
   }
 
   const score = profile.hotNotScore;
+  const owner = profile.relationships.find(
+    (r) => r.relationType.toLowerCase() === "owner"
+  );
+  const operator = profile.relationships.find(
+    (r) => r.relationType.toLowerCase() === "operator"
+  );
+  const hasOwnershipData =
+    owner ||
+    operator ||
+    profile.companyProfile ||
+    profile.contacts.length > 0 ||
+    (profile.ownerIntelligence?.fleetAircraft &&
+      profile.ownerIntelligence.fleetAircraft.length > 0);
 
   return (
     <ScrollView
@@ -105,14 +120,16 @@ export default function AircraftProfileScreen() {
         />
       }
     >
+      {/* 1. Hero — Aircraft Identity */}
       <AircraftCard profile={profile} />
 
+      {/* 2. "Will it sell?" — Hot/Not Score */}
       {score ? (
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="speedometer-outline" size={18} color={colors.tint} />
+            <Ionicons name="flame-outline" size={18} color={colors.tint} />
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Hot or Not Score
+              Will it sell?
             </Text>
           </View>
           <ScoreGauge score={score.score} label={score.label} size="large" />
@@ -145,17 +162,58 @@ export default function AircraftProfileScreen() {
         </View>
       ) : null}
 
-      {profile.ownerIntelligence ? (
-        <OwnerCard intel={profile.ownerIntelligence} />
-      ) : null}
-
-      {(profile.companyProfile || profile.contacts.length > 0 || (profile.ownerIntelligence?.fleetAircraft && profile.ownerIntelligence.fleetAircraft.length > 0)) ? (
+      {/* 3. "Who owns this?" — Owner/Operator + Company + Contacts + Fleet */}
+      {hasOwnershipData ? (
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <View style={styles.sectionHeader}>
             <Ionicons name="people-outline" size={18} color={colors.tint} />
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Ownership Intelligence
+              Who owns this?
             </Text>
+          </View>
+
+          <View style={styles.ownerOperatorBlock}>
+            {owner ? (
+              <View style={styles.ownerOperatorRow}>
+                <Text style={[styles.ownerOperatorLabel, { color: colors.textSecondary }]}>
+                  Owner
+                </Text>
+                <Text style={[styles.ownerOperatorName, { color: colors.text }]} numberOfLines={2}>
+                  {owner.companyName}
+                </Text>
+                {owner.contactName ? (
+                  <Text style={[styles.ownerOperatorContact, { color: colors.textSecondary }]}>
+                    {owner.contactName}
+                    {owner.contactTitle ? ` \u00B7 ${owner.contactTitle}` : ""}
+                  </Text>
+                ) : null}
+                {(owner.city || owner.state || owner.country) ? (
+                  <View style={styles.locationRow}>
+                    <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
+                    <Text style={[styles.locationText, { color: colors.textSecondary }]}>
+                      {[owner.city, owner.state, owner.country].filter(Boolean).join(", ")}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {operator && operator.companyName !== owner?.companyName ? (
+              <View style={[styles.ownerOperatorRow, owner ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 12 } : undefined]}>
+                <Text style={[styles.ownerOperatorLabel, { color: colors.textSecondary }]}>
+                  Operator
+                </Text>
+                <Text style={[styles.ownerOperatorName, { color: colors.text }]} numberOfLines={2}>
+                  {operator.companyName}
+                </Text>
+                {operator.contactName ? (
+                  <Text style={[styles.ownerOperatorContact, { color: colors.textSecondary }]}>
+                    {operator.contactName}
+                    {operator.contactTitle ? ` \u00B7 ${operator.contactTitle}` : ""}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
 
           {profile.companyProfile ? (
@@ -201,45 +259,20 @@ export default function AircraftProfileScreen() {
         </View>
       ) : null}
 
-      {profile.modelTrends ? (
-        <ModelTrendsSection trends={profile.modelTrends} colors={colors} colorScheme={colorScheme} />
+      {/* 4. "What is it?" — Aircraft Specs */}
+      {profile.specs ? (
+        <SpecsSection specs={profile.specs} estimatedAFTT={profile.estimatedAFTT} />
       ) : null}
 
-      {profile.utilizationSummary ? (
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="stats-chart-outline" size={18} color={colors.tint} />
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Utilization
-            </Text>
-          </View>
-          <View style={styles.utilGrid}>
-            <UtilStat
-              label="Total Flights"
-              value={String(profile.utilizationSummary.totalFlights)}
-              colors={colors}
-            />
-            <UtilStat
-              label="Avg/Month"
-              value={profile.utilizationSummary.avgFlightsPerMonth.toFixed(1)}
-              colors={colors}
-            />
-            <UtilStat
-              label="Period"
-              value={profile.utilizationSummary.dateRange}
-              colors={colors}
-            />
-          </View>
-        </View>
-      ) : null}
-
+      {/* 5. "Is it active?" — Utilization + Market Signals combined */}
       <View style={[styles.section, { backgroundColor: colors.surface }]}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="trending-up-outline" size={18} color={colors.tint} />
+          <Ionicons name="pulse-outline" size={18} color={colors.tint} />
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Market Signals
+            Is it active?
           </Text>
         </View>
+
         <View style={styles.utilGrid}>
           <UtilStat
             label="For Sale"
@@ -261,8 +294,41 @@ export default function AircraftProfileScreen() {
             />
           ) : null}
         </View>
+
+        {profile.utilizationSummary ? (
+          <View style={[styles.utilizationBlock, { borderTopColor: colors.border }]}>
+            <View style={styles.utilGrid}>
+              <UtilStat
+                label="Total Flights"
+                value={String(profile.utilizationSummary.totalFlights)}
+                colors={colors}
+              />
+              <UtilStat
+                label="Avg/Month"
+                value={profile.utilizationSummary.avgFlightsPerMonth.toFixed(1)}
+                colors={colors}
+              />
+              <UtilStat
+                label="Period"
+                value={profile.utilizationSummary.dateRange}
+                colors={colors}
+              />
+            </View>
+          </View>
+        ) : null}
       </View>
 
+      {/* 6. "What's the market?" — Model Trends */}
+      {profile.modelTrends ? (
+        <ModelTrendsSection trends={profile.modelTrends} colors={colors} colorScheme={colorScheme} />
+      ) : null}
+
+      {/* 7. Owner Intelligence Deep-Dive */}
+      {profile.ownerIntelligence ? (
+        <OwnerCard intel={profile.ownerIntelligence} />
+      ) : null}
+
+      {/* 8. AI Summary */}
       {isLLMConfigured ? (
         <TouchableOpacity
           style={[styles.aiButton, { backgroundColor: colors.tint }]}
@@ -315,9 +381,9 @@ function ModelTrendsSection({
   return (
     <View style={[styles.section, { backgroundColor: colors.surface }]}>
       <View style={styles.sectionHeader}>
-        <Ionicons name="pulse-outline" size={18} color={colors.tint} />
+        <Ionicons name="trending-up-outline" size={18} color={colors.tint} />
         <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          Market Momentum
+          What's the market?
         </Text>
       </View>
 
@@ -468,6 +534,37 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600" as const,
   },
+  ownerOperatorBlock: {
+    marginBottom: 12,
+  },
+  ownerOperatorRow: {
+    marginBottom: 8,
+  },
+  ownerOperatorLabel: {
+    fontSize: 11,
+    fontWeight: "500" as const,
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
+    marginBottom: 2,
+  },
+  ownerOperatorName: {
+    fontSize: 20,
+    fontWeight: "700" as const,
+    lineHeight: 26,
+  },
+  ownerOperatorContact: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  locationText: {
+    fontSize: 13,
+  },
   timeToSell: {
     fontSize: 13,
     textAlign: "center",
@@ -493,6 +590,11 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginBottom: 4,
   },
+  utilizationBlock: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 12,
+    paddingTop: 12,
+  },
   utilGrid: {
     gap: 12,
   },
@@ -508,6 +610,7 @@ const styles = StyleSheet.create({
   utilValue: {
     fontSize: 16,
     fontWeight: "600" as const,
+    fontVariant: ["tabular-nums" as const],
   },
   momentumHeader: {
     flexDirection: "row",
@@ -530,6 +633,7 @@ const styles = StyleSheet.create({
   heatScore: {
     fontSize: 24,
     fontWeight: "700" as const,
+    fontVariant: ["tabular-nums" as const],
   },
   trendGrid: {
     borderTopWidth: StyleSheet.hairlineWidth,
