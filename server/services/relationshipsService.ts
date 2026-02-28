@@ -35,21 +35,25 @@ export function normalizeRelationships(raw: Record<string, unknown>): Relationsh
         rel.relationType ||
         "Unknown";
 
+      const co = rel.company || {};
+
       if (companyId != null && !companiesMap.has(companyId)) {
         companiesMap.set(companyId, {
           companyId,
-          companyName,
+          companyName: co.name || companyName,
           role: relationshipType,
-          city: rel.city || null,
-          state: rel.state || null,
-          country: rel.country || null,
+          city: co.city || rel.city || null,
+          state: co.stateabbr || co.state || rel.state || null,
+          country: co.country || rel.country || null,
         });
       }
 
+      const ct = rel.contact || {};
+
       const firstName: string =
-        rel.contactfirstname || rel.owrfname || rel.firstname || "";
+        ct.firstname || rel.contactfirstname || rel.owrfname || rel.firstname || "";
       const lastName: string =
-        rel.contactlastname || rel.owrlname || rel.lastname || "";
+        ct.lastname || rel.contactlastname || rel.owrlname || rel.lastname || "";
 
       if (!firstName && !lastName) {
         if (companyId != null && acid) {
@@ -62,13 +66,13 @@ export function normalizeRelationships(raw: Record<string, unknown>): Relationsh
         continue;
       }
 
-      const contactIdRaw = rel.contactid || rel.contactId || null;
+      const contactIdRaw = ct.contactid || rel.contactid || rel.contactId || null;
       const contactId: number | null =
         contactIdRaw != null ? Number(contactIdRaw) : null;
-      const email: string | null = rel.email || rel.contactemail || null;
-      const mobile: string | null = rel.mobile || rel.mobilephone || rel.cellphone || null;
-      const office: string | null = rel.office || rel.phone || rel.officephone || rel.directphone || null;
-      const title: string | null = rel.title || rel.contacttitle || null;
+      const email: string | null = ct.email || rel.email || rel.contactemail || null;
+      const mobile: string | null = ct.mobile || rel.mobile || rel.mobilephone || rel.cellphone || null;
+      const office: string | null = ct.office || rel.office || rel.phone || rel.officephone || rel.directphone || null;
+      const title: string | null = ct.title || rel.title || rel.contacttitle || null;
 
       const contactKey =
         contactId != null ? String(contactId) : `name:${firstName}|${lastName}`;

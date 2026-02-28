@@ -1,0 +1,231 @@
+# Workflow Doc — RegNbr → Basic Aircraft → Condensed Owner/Operator → Full Relationships Graph
+
+## Goal
+
+Given a **registration number (tail)**, produce a broker-ready aircraft snapshot **and** the normalized **Aircraft ↔ Company ↔ Contact** relationship graph.
+
+This workflow is designed so you can:
+
+* render a fast “Summary” screen quickly
+* hydrate richer sections (times, avionics, maintenance, images)
+* build a durable relationship graph for CRM enrichment and downstream lookups
+
+---
+
+## Inputs
+
+* `regnbr` (string): e.g., `N3174T` (normalize to uppercase, strip spaces)
+* `apiToken` (string): path token
+* `bearerToken` (string): Authorization header
+
+## Canonical Keys
+
+* `ACID` = `aircraftid` (aircraft primary key)
+* `COMPID` = `companyid`
+* `CONTACTID` = `contactid`
+
+---
+
+## Step 0 — Auth (prereq)
+
+**POST** `https://customer.jetnetconnect.com/api/Admin/APILogin`
+Returns `bearerToken` + `apiToken`.
+
+**Headers for all aircraft endpoints below**
+
+* `Authorization: Bearer {{bearerToken}}`
+* `Content-Type: application/json` for POST calls
+
+---
+
+## Step 1 — getRegNumber (RegNbr → ACID + basic aircraft)
+
+**GET** `https://customer.jetnetconnect.com/api/Aircraft/getRegNumber/{regnbr}/{apiToken}`
+
+**Output to persist**
+
+* `acid = aircraftresult.aircraftid` (e.g., `1234`)
+* `modelid = aircraftresult.modelid`
+* `regnbr = aircraftresult.regnbr`
+* (Optional) keep `aircraftresult` as “Basic Summary”
+
+**UI**
+
+* Render header immediately (make/model/year/base), don’t wait on next steps.
+
+---
+
+## Step 2 — getCondensedOwnerOperators (ACID → broker snapshot)
+
+**POST** `https://customer.jetnetconnect.com/api/Aircraft/getCondensedOwnerOperators/{{apiToken}}`
+
+**Body**
+
+```json
+{ "aclist": [1234] }
+```
+
+**What this step is “for”**
+
+* One-call, display-ready *condensed* view:
+
+  * owner/operator/chief pilot blocks
+  * times + time-as-of date
+  * avionics summary and full avionics list
+  * interiors/exteriors
+  * maintenance summary + notes
+  * engines array
+  * image URL (signed/expiring)
+
+**Persist**
+
+* `condensedRow = aircraftowneroperators[0]` where `acid == 1234`
+* `timesasofdate`
+* `acimageurl` (session-only; signed URL expires)
+* `avgevalue` / `evalue` if present
+
+**UI**
+
+* Hydrate “Broker Card” and tabs (Maintenance, Avionics, Engines, Interior, Exterior).
+
+---
+
+## Step 3 — getRelationships (ACID → full relationship graph + embedded entities)
+
+**POST** `https://customer.jetnetconnect.com/api/Aircraft/getRelationships/{{apiToken}}`
+
+**Body**
+
+```json
+{ "aclist": [1234] }
+```
+
+### What this step is “for”
+
+This is your **graph truth** for:
+
+* which companies are linked to the aircraft
+* which contacts are linked (and to which company)
+* role type + role order / sequence
+* operator flag (`isoperator`)
+* embedded company object + embedded contact object (handy for enrichment)
+
+### Output shape (from your example)
+
+* `relationships[]` where each item contains:
+
+  * edge fields: `aircraftid`, `regnbr`, `companyid`, `contactid`, `relationtype`, `relationseqno`, `isoperator`
+  * `company { ... }` full company mini-profile
+  * `contact { ... }` contact mini-profile
+
+### Normalize into a graph model
+
+Build these collections:
+
+**Companies**
+
+* `companiesById[company.companyid] = company`
+
+**Contacts**
+
+* `contactsById[contact.contactid] = contact`
+
+**Edges**
+
+* `edges.push({ aircraftid, companyid, contactid, relationtype, relationseqno, isoperator })`
+
+### Dedupe rules (important)
+
+You’ll commonly see:
+
+* same company + same contact repeated across roles (Owner/Operator/Chief Pilot)
+* same company across multiple contacts (larger flight departments)
+
+Dedupe key:
+
+* `(aircraftid, companyid, contactid, relationtype)` unique
+
+### Role precedence (display ordering)
+
+Use `relationseqno` first (already provided), with a fallback precedence if needed:
+
+1. Owner
+2. Operator
+3. Manager
+4. Chief Pilot
+5. Maintenance / MX roles
+6. Other
+
+---
+
+## Step 4 — Reconcile “Condensed” vs “Relationships”
+
+You now have two sources:
+
+* **Condensed** = best for *rich aircraft presentation* (times, avionics, image, maint, interior/exterior)
+* **Relationships** = best for *relationship truth + CRM mapping*
+
+### Source-of-truth guidance
+
+* For **roles + relationship edges** → prefer **getRelationships**
+* For **aircraft presentation fields** (times, avionics, image, interior, maintenance) → prefer **getCondensedOwnerOperators**
+* For **company/contact profiles**:
+
+  * if you already have embedded `company`/`contact` objects from Relationships, use them
+  * if you need *full* company/contact enrichment, fan out to dedicated Company/Contact endpoints later
+
+### Practical UI composition
+
+* “Owner / Operator” section:
+
+  * drive the list from `relationships[]`
+  * optionally enrich display using condensed fields if they exist (but don’t invent relationships from condensed)
+
+---
+
+## Step 5 — Recommended call strategy (performance)
+
+### Minimal synchronous chain
+
+1. getRegNumber (fast, gets ACID)
+2. in parallel:
+
+   * getCondensedOwnerOperators
+   * getRelationships
+
+This yields:
+
+* fast header + broker card
+* durable relationship graph for actions (call/email/CRM)
+
+---
+
+## Step 6 — What you can do next with these outputs
+
+Once you’ve built the graph:
+
+* “Call / Text / Email” actions:
+
+  * use `contact.office/mobile/email` when present
+  * if missing, trigger Contact enrichment endpoint by `CONTACTID`
+* “Company profile”:
+
+  * use embedded company block now
+  * optionally enrich via Company endpoint by `COMPID`
+* “CRM sync” (HubSpot/Salesforce):
+
+  * Upsert Company by `COMPID`
+  * Upsert Contact by `CONTACTID`
+  * Create associations using `edges` + role labels
+
+---
+
+## Deliverable object (single payload your app can rely on)
+
+Return one object after Step 3 completes:
+
+* `keys: { regnbr, acid, modelid }`
+* `basic: aircraftresult (from Step 1)`
+* `condensed: { row, maintenance[], engines[], avionics[], interior[], exterior[], apu[] }`
+* `graph: { companiesById, contactsById, edges[] }`
+* `meta: { timesAsOfDate, imageUrlExpires: true }`
