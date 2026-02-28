@@ -29,6 +29,7 @@ import { FleetItem } from "@/components/FleetItem";
 import { SpecsSection } from "@/components/SpecsSection";
 import { ProfileSkeleton } from "@/components/SkeletonLoader";
 import * as Clipboard from "expo-clipboard";
+import { Image } from "expo-image";
 import type { AircraftProfile, ModelTrendSignals, Relationship, IntelResponse, BrokerContact } from "@/shared/types";
 
 export default function AircraftProfileScreen() {
@@ -130,6 +131,35 @@ export default function AircraftProfileScreen() {
         />
       }
     >
+      {/* 0. Photo Gallery */}
+      {profile.pictures && profile.pictures.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.photoGallery}
+          contentContainerStyle={styles.photoGalleryContent}
+        >
+          {profile.pictures.map((pic, idx) => (
+            <View key={idx} style={styles.photoContainer}>
+              <Image
+                source={{ uri: pic.url }}
+                style={styles.photoImage}
+                contentFit="cover"
+                transition={200}
+              />
+              {pic.caption ? (
+                <Text
+                  style={[styles.photoCaption, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {pic.caption}
+                </Text>
+              ) : null}
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+
       {/* 1. Hero — Aircraft Identity */}
       <AircraftCard profile={profile} />
 
@@ -907,5 +937,26 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 17,
     fontWeight: "600" as const,
+  },
+  photoGallery: {
+    marginHorizontal: -16,
+    marginBottom: 12,
+  },
+  photoGalleryContent: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  photoContainer: {
+    width: 280,
+  },
+  photoImage: {
+    width: 280,
+    height: 180,
+    borderRadius: 12,
+  },
+  photoCaption: {
+    fontSize: 11,
+    marginTop: 4,
+    textAlign: "center" as const,
   },
 });

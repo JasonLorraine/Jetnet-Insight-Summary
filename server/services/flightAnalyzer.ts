@@ -82,13 +82,13 @@ export function normalizeFlights(raw: Record<string, unknown>): FlightRecord[] {
         f.ArrivalAirport || f.ArriveAirport || f.arr || ""
       ).toString().toUpperCase().trim();
 
-      const hours = f.flighthours ?? f.FlightHours ?? f.flighttime ?? f.FlightTime ?? null;
+      const rawMinutes = f.flighthours ?? f.FlightHours ?? f.flighttime ?? f.FlightTime ?? null;
 
       return {
         date: dateValue,
         origin,
         destination,
-        flightHours: hours != null ? Number(hours) || null : null,
+        flightHours: rawMinutes != null ? (Math.round((Number(rawMinutes) / 60) * 10) / 10) || null : null,
       } as FlightRecord;
     })
     .filter(Boolean) as FlightRecord[];
