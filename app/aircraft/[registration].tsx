@@ -115,24 +115,33 @@ export default function AircraftProfileScreen() {
           { backgroundColor: colors.background, paddingTop: Platform.OS === "web" ? webTopInset : insets.top },
         ]}
       >
-        <Ionicons
-          name="cloud-offline-outline"
-          size={48}
-          color={colors.secondaryLabel}
-        />
+        <View style={[styles.notFoundIcon, { backgroundColor: colors.secondaryLabel + "14" }]}>
+          <Ionicons
+            name="airplane-outline"
+            size={36}
+            color={colors.secondaryLabel}
+          />
+        </View>
         <Text style={[styles.errorTitle, { color: colors.text }]}>
-          Couldn't load aircraft
+          Aircraft Not Found
         </Text>
         <Text
           style={[styles.errorMessage, { color: colors.secondaryLabel }]}
         >
-          Check your connection and try again.
+          No results for "{registration}". Check the registration and try again.
         </Text>
         <TouchableOpacity
-          style={[styles.retryButton, { backgroundColor: colors.tint }]}
+          style={[styles.backToSearchButton, { backgroundColor: colors.tint }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="search" size={18} color="#FFFFFF" />
+          <Text style={styles.retryText}>Back to Search</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.retryLink]}
           onPress={() => refetchPhase1()}
         >
-          <Text style={styles.retryText}>Try Again</Text>
+          <Text style={[styles.retryLinkText, { color: colors.tint }]}>Try Again</Text>
         </TouchableOpacity>
       </View>
     );
@@ -248,7 +257,18 @@ const styles = StyleSheet.create({
     textAlign: "center" as const,
     maxWidth: 300,
   },
-  retryButton: {
+  notFoundIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  backToSearchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -258,6 +278,14 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600" as const,
+  },
+  retryLink: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  retryLinkText: {
+    fontSize: 15,
+    fontWeight: "500" as const,
   },
   stickyHeader: {
     paddingHorizontal: 16,
