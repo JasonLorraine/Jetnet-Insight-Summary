@@ -331,6 +331,33 @@ export async function buildAircraftProfile(
     }
   }
 
+  let resolvedCompanyId = ownerCompanyId;
+  let resolvedCompanyName = ownerCompanyName;
+  if (!resolvedCompanyId) {
+    const ownerRel = relationships.find(
+      (r) => r.relationType.toLowerCase() === "owner" && r.companyId
+    );
+    if (ownerRel) {
+      resolvedCompanyId = ownerRel.companyId;
+      resolvedCompanyName = ownerRel.companyName;
+    }
+  }
+
+  let lateCompanyData: PromiseSettledResult<Record<string, unknown>> | null = null;
+  let lateContactsData: PromiseSettledResult<Record<string, unknown>> | null = null;
+  let lateFleetData: PromiseSettledResult<Record<string, unknown>> | null = null;
+
+  if (resolvedCompanyId && !ownerCompanyId) {
+    const [cData, ctData, fData] = await Promise.allSettled([
+      getCompanyList(resolvedCompanyId, session),
+      getContactList(resolvedCompanyId, session),
+      resolvedCompanyName ? searchFleetByCompany(resolvedCompanyName, session) : Promise.reject("no name"),
+    ]);
+    lateCompanyData = cData;
+    lateContactsData = ctData;
+    lateFleetData = fData;
+  }
+
   const history =
     historyData.status === "fulfilled"
       ? extractHistory(historyData.value)
@@ -355,19 +382,36 @@ export async function buildAircraftProfile(
       ? (modelTrendsData.value as ModelTrendSignals)
       : null;
 
+  const effectiveCompanyData = companyData.status === "fulfilled" ? companyData : lateCompanyData;
+  const effectiveContactsData = contactsData.status === "fulfilled" ? contactsData : lateContactsData;
+  const effectiveFleetData = fleetData.status === "fulfilled" ? fleetData : lateFleetData;
+
   const companyProfile: CompanyProfile | null =
-    companyData.status === "fulfilled" && ownerCompanyId
-      ? extractCompanyProfile(companyData.value, ownerCompanyId, session.apiToken)
+    effectiveCompanyData?.status === "fulfilled" && resolvedCompanyId
+      ? extractCompanyProfile(effectiveCompanyData.value, resolvedCompanyId, session.apiToken)
       : null;
 
-  const contacts: Contact[] =
-    contactsData.status === "fulfilled"
-      ? extractContacts(contactsData.value)
+  let contacts: Contact[] =
+    effectiveContactsData?.status === "fulfilled"
+      ? extractContacts(effectiveContactsData.value)
       : [];
 
+  if (contacts.length === 0) {
+    contacts = relationships
+      .filter((r) => r.contactName)
+      .map((r) => ({
+        contactName: r.contactName!,
+        title: r.contactTitle || null,
+        email: r.contactEmail || null,
+        phone: r.contactPhone || null,
+        mobilePhone: null,
+        roleSignal: classifyContactRole(r.contactTitle || null),
+      }));
+  }
+
   const fleetAircraft: FleetAircraft[] =
-    fleetData.status === "fulfilled"
-      ? extractFleetAircraft(fleetData.value, aircraftId, session.apiToken)
+    effectiveFleetData?.status === "fulfilled"
+      ? extractFleetAircraft(effectiveFleetData.value, aircraftId, session.apiToken)
       : [];
 
   let specs: AircraftSpecs | null = null;

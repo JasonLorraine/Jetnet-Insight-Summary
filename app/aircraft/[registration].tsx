@@ -9,6 +9,7 @@ import {
   useColorScheme,
   Platform,
   Linking,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,7 +28,7 @@ import { ContactRow } from "@/components/ContactRow";
 import { FleetItem } from "@/components/FleetItem";
 import { SpecsSection } from "@/components/SpecsSection";
 import { ProfileSkeleton } from "@/components/SkeletonLoader";
-import type { AircraftProfile, ModelTrendSignals } from "@/shared/types";
+import type { AircraftProfile, ModelTrendSignals, Relationship } from "@/shared/types";
 
 export default function AircraftProfileScreen() {
   const { registration } = useLocalSearchParams<{ registration: string }>();
@@ -174,44 +175,22 @@ export default function AircraftProfileScreen() {
 
           <View style={styles.ownerOperatorBlock}>
             {owner ? (
-              <View style={styles.ownerOperatorRow}>
-                <Text style={[styles.ownerOperatorLabel, { color: colors.textSecondary }]}>
-                  Owner
-                </Text>
-                <Text style={[styles.ownerOperatorName, { color: colors.text }]} numberOfLines={2}>
-                  {owner.companyName}
-                </Text>
-                {owner.contactName ? (
-                  <Text style={[styles.ownerOperatorContact, { color: colors.textSecondary }]}>
-                    {owner.contactName}
-                    {owner.contactTitle ? ` \u00B7 ${owner.contactTitle}` : ""}
-                  </Text>
-                ) : null}
-                {(owner.city || owner.state || owner.country) ? (
-                  <View style={styles.locationRow}>
-                    <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
-                    <Text style={[styles.locationText, { color: colors.textSecondary }]}>
-                      {[owner.city, owner.state, owner.country].filter(Boolean).join(", ")}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+              <RelationshipBlock
+                label="Owner"
+                rel={owner}
+                registration={profile.registration}
+                colors={colors}
+              />
             ) : null}
 
             {operator && operator.companyName !== owner?.companyName ? (
-              <View style={[styles.ownerOperatorRow, owner ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 12 } : undefined]}>
-                <Text style={[styles.ownerOperatorLabel, { color: colors.textSecondary }]}>
-                  Operator
-                </Text>
-                <Text style={[styles.ownerOperatorName, { color: colors.text }]} numberOfLines={2}>
-                  {operator.companyName}
-                </Text>
-                {operator.contactName ? (
-                  <Text style={[styles.ownerOperatorContact, { color: colors.textSecondary }]}>
-                    {operator.contactName}
-                    {operator.contactTitle ? ` \u00B7 ${operator.contactTitle}` : ""}
-                  </Text>
-                ) : null}
+              <View style={owner ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 12 } : undefined}>
+                <RelationshipBlock
+                  label="Operator"
+                  rel={operator}
+                  registration={profile.registration}
+                  colors={colors}
+                />
               </View>
             ) : null}
           </View>
@@ -354,6 +333,106 @@ export default function AircraftProfileScreen() {
         </TouchableOpacity>
       )}
     </ScrollView>
+  );
+}
+
+function cleanPhone(raw: string): string {
+  return raw.replace(/[^+\d]/g, "");
+}
+
+function RelationshipBlock({
+  label,
+  rel,
+  registration,
+  colors,
+}: {
+  label: string;
+  rel: Relationship;
+  registration: string;
+  colors: Record<string, string>;
+}) {
+  const r = rel;
+  const hasPhone = !!r.contactPhone;
+  const hasEmail = !!r.contactEmail;
+
+  const handleCall = async () => {
+    if (!r.contactPhone) return;
+    const cleaned = cleanPhone(r.contactPhone);
+    if (!cleaned) return;
+    const url = `tel:${cleaned}`;
+    const supported = await Linking.canOpenURL(url);
+    if (supported) {
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Linking.openURL(url);
+    } else {
+      Alert.alert("Unable to Call", `Cannot open dialer for ${r.contactPhone}`);
+    }
+  };
+
+  const handleEmail = async () => {
+    if (!r.contactEmail) return;
+    const subject = encodeURIComponent(`Regarding Aircraft ${registration}`);
+    const url = `mailto:${r.contactEmail}?subject=${subject}`;
+    const supported = await Linking.canOpenURL("mailto:");
+    if (supported) {
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Linking.openURL(url);
+    } else {
+      Alert.alert("Unable to Email", `Cannot open mail client for ${r.contactEmail}`);
+    }
+  };
+
+  return (
+    <View style={styles.ownerOperatorRow}>
+      <Text style={[styles.ownerOperatorLabel, { color: colors.textSecondary }]}>
+        {label}
+      </Text>
+      <Text style={[styles.ownerOperatorName, { color: colors.text }]} numberOfLines={2}>
+        {r.companyName}
+      </Text>
+      {r.contactName ? (
+        <Text style={[styles.ownerOperatorContact, { color: colors.textSecondary }]}>
+          {r.contactName}
+          {r.contactTitle ? ` \u00B7 ${r.contactTitle}` : ""}
+        </Text>
+      ) : null}
+      {(r.city || r.state || r.country) ? (
+        <View style={styles.locationRow}>
+          <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
+          <Text style={[styles.locationText, { color: colors.textSecondary }]}>
+            {[r.city, r.state, r.country].filter(Boolean).join(", ")}
+          </Text>
+        </View>
+      ) : null}
+      {(hasPhone || hasEmail) ? (
+        <View style={styles.relActionRow}>
+          {hasPhone ? (
+            <TouchableOpacity
+              style={[styles.relActionButton, { backgroundColor: colors.surfaceSecondary }]}
+              onPress={handleCall}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="call" size={16} color="#30D158" />
+              <Text style={[styles.relActionLabel, { color: colors.text }]}>
+                {r.contactPhone}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {hasEmail ? (
+            <TouchableOpacity
+              style={[styles.relActionButton, { backgroundColor: colors.surfaceSecondary }]}
+              onPress={handleEmail}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="mail" size={16} color="#FF9F0A" />
+              <Text style={[styles.relActionLabel, { color: colors.text }]} numberOfLines={1}>
+                {r.contactEmail}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -555,6 +634,25 @@ const styles = StyleSheet.create({
   ownerOperatorContact: {
     fontSize: 14,
     marginTop: 2,
+  },
+  relActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  relActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    minHeight: 36,
+  },
+  relActionLabel: {
+    fontSize: 13,
+    fontWeight: "500" as const,
   },
   locationRow: {
     flexDirection: "row",
