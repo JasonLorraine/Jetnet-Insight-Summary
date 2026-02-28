@@ -1,0 +1,206 @@
+# JETNET Insight — Field → UI Presentation Mapping
+
+### (“How it should appear in the UI”)
+
+This converts the raw API fields into **interaction primitives**.
+Goal: users never feel like they are reading database output — they are *understanding an aircraft instantly*.
+
+UI components referenced below:
+
+* **Hero** = top aircraft header
+* **Chip** = small contextual label
+* **Badge** = colored status indicator
+* **Card Row** = key-value in summary card
+* **Timeline Event** = chronological marker
+* **Capability Tag** = grouped functional feature
+* **Insight Metric** = highlighted numeric signal
+* **Expandable Section** = collapsed until opened
+* **Hidden (Details)** = expert-only view
+
+---
+
+# 1️⃣ Aircraft Identity (Immediate Recognition Layer)
+
+| Field               | Endpoint  | UI Presentation      | Why                                      |
+| ------------------- | --------- | -------------------- | ---------------------------------------- |
+| `regnbr`            | RegNumber | **Hero Title**       | Primary anchor users recognize instantly |
+| `make + model`      | RegNumber | **Hero Subtitle**    | Confirms aircraft identity in <1 sec     |
+| `yearmfr / yeardlv` | RegNumber | **Hero Chip**        | Age context without reading specs        |
+| `airframetype`      | RegNumber | **Chip**             | Quick classification cue                 |
+| `maketype`          | RegNumber | **Chip**             | Sets operational expectations            |
+| `categorysize`      | RegNumber | **Chip**             | Market segment scanning                  |
+| `serialnbr`         | RegNumber | **Hidden (Details)** | Needed only for diligence                |
+
+---
+
+# 2️⃣ Status + Operational Context (Decision Layer)
+
+| Field             | Endpoint  | UI Presentation       | Why                                       |
+| ----------------- | --------- | --------------------- | ----------------------------------------- |
+| `status`          | Condensed | **Colored Badge**     | Immediate “Is this actionable?” signal    |
+| `lifecycle`       | Condensed | **Badge (secondary)** | Active vs inactive aircraft               |
+| `ownership`       | RegNumber | **Card Row**          | Indicates complexity of deal              |
+| `usage / acusage` | Both      | **Chip**              | Business vs personal changes expectations |
+| `maintained`      | Both      | **Chip**              | Trust indicator for buyers/operators      |
+| `regexpiresdate`  | Condensed | **Timeline Event**    | Compliance awareness without clutter      |
+
+---
+
+# 3️⃣ Location Intelligence (Context Layer)
+
+| Field            | Endpoint  | UI Presentation      | Why                           |
+| ---------------- | --------- | -------------------- | ----------------------------- |
+| `baseicao`       | Both      | **Hero Chip**        | Aviation-native shorthand     |
+| `basename`       | Condensed | **Card Row**         | Human-readable context        |
+| `basecity/state` | Condensed | **Card Row**         | Geographic intuition          |
+| `basecountry`    | Condensed | **Hidden (Details)** | Rarely needed in US workflows |
+
+---
+
+# 4️⃣ Relationship Graph (Most Important Section)
+
+## Display Title:
+
+### **“People Around This Aircraft”**
+
+| Field                          | Endpoint      | UI Presentation                                 | Why                              |
+| ------------------------------ | ------------- | ----------------------------------------------- | -------------------------------- |
+| `company.name`                 | Relationships | **Primary Company Card**                        | Organization is cognitive anchor |
+| `relationtype`                 | Relationships | **Role Chips** (Owner / Operator / Chief Pilot) | Removes duplicate rows visually  |
+| `relationseqno`                | Relationships | **Ordering logic (not visible)**                | Controls display priority        |
+| `contact.firstname + lastname` | Relationships | **Contact Card Header**                         | Human connection point           |
+| `contact.title`                | Relationships | **Subtitle**                                    | Authority context                |
+| `contact.phone/email`          | Relationships | **Action Buttons**                              | Enables immediate outreach       |
+| `isoperator`                   | Relationships | **Operator Icon Tag**                           | Highlights operational contact   |
+
+---
+
+# 5️⃣ Market & Ownership Timeline (Narrative Layer)
+
+| Field            | Endpoint  | UI Presentation             | Why                         |
+| ---------------- | --------- | --------------------------- | --------------------------- |
+| `datepurchased`  | Condensed | **Timeline Event**          | Ownership stability insight |
+| `datechanged`    | Condensed | **Timeline Event (subtle)** | Data recency confidence     |
+| `regexpiresdate` | Condensed | **Timeline Event**          | Compliance milestone        |
+
+Example:
+
+```
+2011 — Aircraft Purchased
+2016 — Record Updated
+2027 — Registration Expires
+```
+
+Humans understand time faster than tables.
+
+---
+
+# 6️⃣ Operational Health (Broker Gold)
+
+| Field           | Endpoint  | UI Presentation      | Why                        |
+| --------------- | --------- | -------------------- | -------------------------- |
+| `aftt`          | Condensed | **Insight Metric**   | Core wear indicator        |
+| `estaftt`       | Condensed | **Secondary Metric** | Completeness confidence    |
+| `estflighthrs`  | Condensed | **Gauge Bar**        | Utilization story          |
+| `timesasofdate` | Condensed | **Small Caption**    | Prevents misinterpretation |
+
+---
+
+# 7️⃣ Engines (Condition Understanding)
+
+| Field      | Endpoint      | UI Presentation  | Why                                   |
+| ---------- | ------------- | ---------------- | ------------------------------------- |
+| `engmodel` | Condensed     | **Card Header**  | Engine ecosystem context              |
+| `ttsnew`   | Engines array | **Metric Row**   | Lifecycle positioning                 |
+| `tbo`      | Engines array | **Progress Bar** | Remaining overhaul life visualization |
+
+Visual:
+
+```
+Engine Life Remaining
+████████░░ 85%
+```
+
+---
+
+# 8️⃣ Avionics (Capability, NOT Inventory)
+
+| Field              | Endpoint       | UI Presentation        | Why                                         |
+| ------------------ | -------------- | ---------------------- | ------------------------------------------- |
+| `avionics` summary | Condensed      | **Capability Tags**    | Quick modernization signal                  |
+| avionics list      | Avionics array | **Expandable Section** | Pilots want detail; brokers don’t initially |
+
+Example Tags:
+
+* IFR Equipped
+* Autopilot
+* GPS Navigation
+* Weather Radar
+* TCAS
+
+---
+
+# 9️⃣ Interior & Exterior (Emotional Value)
+
+| Field                 | Endpoint       | UI Presentation         | Why                        |
+| --------------------- | -------------- | ----------------------- | -------------------------- |
+| interior details      | Interior array | **Narrative Card**      | Buyers respond emotionally |
+| exterior colors       | Exterior array | **Single Summary Line** | Avoids spec overload       |
+| cabinetry/seating/etc | Interior array | **Expandable Details**  | Secondary interest only    |
+
+---
+
+# 🔟 Image + Value (Visual Anchor)
+
+| Field        | Endpoint  | UI Presentation           | Why                           |
+| ------------ | --------- | ------------------------- | ----------------------------- |
+| `acimageurl` | Condensed | **Hero Background Image** | Engagement multiplier         |
+| `avgevalue`  | Condensed | **Large Value Card**      | Pricing orientation instantly |
+| `evalue`     | Condensed | **Sub-value label**       | Precision when available      |
+
+---
+
+# 11️⃣ Maintenance & Compliance (Trust Layer)
+
+| Field               | Endpoint          | UI Presentation              | Why                         |
+| ------------------- | ----------------- | ---------------------------- | --------------------------- |
+| maintenance program | Maintenance block | **Card Row**                 | Confidence indicator        |
+| damage status       | Maintenance block | **Warning Badge**            | High-risk information       |
+| notes               | Maintenance block | **Expandable Insight Panel** | Often contains hidden story |
+
+---
+
+# 12️⃣ Hidden Expert Mode (Power Users Only)
+
+These should NOT appear initially:
+
+* financing/doc fields
+* lien metadata
+* raw avionics inventory
+* serial-level engine data
+* address line 2 / fax numbers
+
+Expose behind:
+👉 **“View Full Technical Record”**
+
+---
+
+# ⭐ The Big UX Rule (Specific to Your App)
+
+Your API returns **data completeness**.
+
+Your UI must communicate **decision confidence**.
+
+So visually prioritize:
+
+1. Identity
+2. People
+3. Condition
+4. Opportunity
+5. Details
+
+NOT database categories.
+
+---
+
+If you want next, I can map this directly to a **SwiftUI component hierarchy** (exact screen layout for iOS) so your developers can implement it without interpretation — and it will align perfectly with your async endpoint loading order.
