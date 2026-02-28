@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "My App",
-    "slug": "my-app",
+    "name": "Hot or Not",
+    "slug": "hot-or-not-jets",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "hotornot",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.myapp"
+      "bundleIdentifier": "com.hotornot.jets"
     },
     "android": {
-      "package": "com.myapp",
+      "package": "com.hotornot.jets",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

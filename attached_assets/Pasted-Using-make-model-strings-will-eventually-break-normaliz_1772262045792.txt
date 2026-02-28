@@ -1,0 +1,209 @@
+Using make/model strings will eventually break normalization and caching.
+modelid gives you a stable relational join key across JETNET datasets.
+
+Below is the updated engineering workflow reflecting this change.
+
+Updated Workflow
+Model Trends via modelid
+1. Why ModelID (Not Make/Model Text)
+Problems with make/model strings
+
+Naming inconsistencies (G650, G650ER, G-650ER)
+
+Localization differences
+
+Future OEM naming changes
+
+Harder cache keys
+
+Ambiguous series mapping
+
+ModelID advantages
+
+✅ Canonical JETNET identifier
+✅ Stable across endpoints
+✅ Faster joins
+✅ Cleaner caching
+✅ Required for long-term analytics
+
+2. New Golden Path (Expanded)
+Previous Flow
+registration
+ → getRegNumber
+ → aircraftId
+ → enrichment calls
+Updated Flow
+registration
+   ↓
+getRegNumber
+   ↓
+aircraftId + modelid   ← IMPORTANT ADDITION
+   ↓
+Parallel Enrichment
+   ├ aircraft profile
+   ├ relationships
+   ├ activity
+   ├ pictures
+   └ GetModelTrends(modelid)  ← NEW
+
+Model trends now execute in parallel with enrichment.
+
+3. Required Endpoint Sequence
+Step 1 — Registration Lookup
+
+(Already implemented)
+
+Returns:
+
+{
+  "aircraftid": 123456,
+  "modelid": 1194
+}
+
+Engineer must explicitly persist modelid.
+
+Step 2 — Call Model Trends
+
+Create request:
+
+GET /api/Market/GetModelTrends/{modelid}/{apiToken}
+
+(or POST variant depending on tenant implementation)
+
+4. Backend Service Update
+
+Create / update:
+
+services/modelTrendService.ts
+Function Contract
+async function getModelTrends(modelId: number): Promise<ModelTrendSignals>
+Implementation Flow
+1. check cache(modelId)
+2. if cached → return
+3. ensureSession()
+4. call GetModelTrends(modelId)
+5. normalize response
+6. cache result (24h TTL)
+7. return signals
+5. Cache Key Design
+
+Use:
+
+modeltrend:{modelId}
+
+TTL:
+
+86400 seconds (24 hours)
+
+Reason:
+Model market data is slow-moving.
+
+6. Profile Assembler Update
+
+Modify:
+
+/services/profileAssembler.ts
+
+Add parallel fetch:
+
+const [
+  aircraft,
+  relationships,
+  activity,
+  pictures,
+  modelTrends
+] = await Promise.all([
+  getAircraft(),
+  getRelationships(),
+  getActivity(),
+  getPictures(),
+  getModelTrends(profile.modelId)
+]);
+
+This keeps latency low.
+
+7. Normalized ModelTrend Object
+
+Engineer must convert raw API response into:
+
+interface ModelTrendSignals {
+  modelId: number;
+  avgDaysOnMarket: number;
+  inventoryTrend: "Increasing" | "Stable" | "Decreasing";
+  domTrend: "Improving" | "Stable" | "Worsening";
+  askingPriceTrend: "Rising" | "Flat" | "Falling";
+  transactionVelocityTrend: "Increasing" | "Stable" | "Declining";
+  marketHeatScore: number; // 0–1
+}
+
+Never expose raw payload downstream.
+
+8. Hot/Not Engine Update
+
+Modify scoring input:
+
+scoreInputs.modelMarket = modelTrendSignals;
+
+Adjustment example:
+
+if (signals.marketHeatScore > 0.75)
+   score += 8;
+
+if (signals.marketHeatScore < 0.45)
+   score -= 8;
+9. MCP Tool Update
+
+Extend tool output:
+
+{
+  "modelMarket": {
+    "modelId": 1194,
+    "marketHeat": "Strong",
+    "avgDaysOnMarket": 142,
+    "trendDirection": "Improving"
+  }
+}
+
+Agents now understand macro context.
+
+10. AI Summary Prompt Update
+
+Add instruction:
+
+Incorporate model market trends using the provided marketHeat and DOM trend signals when discussing timing.
+
+Example generated text:
+
+Market momentum for this model is strengthening, with declining inventory and improving days-on-market performance.
+
+11. UI Update
+
+Aircraft header gains market indicator:
+
+MARKET MOMENTUM
+Strong Seller Market ↑
+
+No charts needed initially.
+
+12. Performance Impact
+
+Because this runs in parallel:
+
+Added latency ≈ 0–150 ms (cached)
+
+First lookup ≈ +400–600 ms worst case
+
+Acceptable for huge intelligence gain.
+
+13. Updated Intelligence Stack
+
+You now evaluate:
+
+Aircraft Condition
++ Owner Behavior
++ Live SkyView Signals
++ Model Market Momentum (modelid)
+----------------------------------
+Disposition Intelligence
+
+This is a complete decision framework.
