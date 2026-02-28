@@ -93,9 +93,21 @@ export interface HistoryEntry {
   description: string;
 }
 
+export interface ModelTrendSignals {
+  modelId: number;
+  avgDaysOnMarket: number | null;
+  inventoryTrend: "Increasing" | "Stable" | "Decreasing";
+  domTrend: "Improving" | "Stable" | "Worsening";
+  askingPriceTrend: "Rising" | "Flat" | "Falling";
+  transactionVelocityTrend: "Increasing" | "Stable" | "Declining";
+  marketHeatScore: number;
+  marketHeatLabel: "Strong" | "Moderate" | "Weak";
+}
+
 export interface AircraftProfile {
   registration: string;
   aircraftId: number;
+  modelId: number | null;
   make: string;
   model: string;
   series: string | null;
@@ -116,6 +128,7 @@ export interface AircraftProfile {
   pictures: AircraftPicture[];
   utilizationSummary: UtilizationSummary | null;
   marketSignals: MarketSignals;
+  modelTrends: ModelTrendSignals | null;
   history: HistoryEntry[];
   ownerIntelligence: OwnerIntelligence | null;
   hotNotScore: HotNotScore | null;

@@ -18,6 +18,7 @@ import { useThemeColors, getScoreColor } from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { AircraftCard } from "@/components/AircraftCard";
+import type { ModelTrendSignals } from "@/shared/types";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { FactorBar } from "@/components/FactorBar";
 import { OwnerCard } from "@/components/OwnerCard";
@@ -146,6 +147,10 @@ export default function AircraftProfileScreen() {
         <OwnerCard intel={profile.ownerIntelligence} />
       ) : null}
 
+      {profile.modelTrends ? (
+        <ModelTrendsSection trends={profile.modelTrends} colors={colors} colorScheme={colorScheme} />
+      ) : null}
+
       {profile.utilizationSummary ? (
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <View style={styles.sectionHeader}>
@@ -229,6 +234,121 @@ export default function AircraftProfileScreen() {
         </TouchableOpacity>
       )}
     </ScrollView>
+  );
+}
+
+function ModelTrendsSection({
+  trends,
+  colors,
+  colorScheme,
+}: {
+  trends: ModelTrendSignals;
+  colors: ReturnType<typeof useThemeColors>;
+  colorScheme: "light" | "dark" | null | undefined;
+}) {
+  const heatColor = getScoreColor(trends.marketHeatScore * 100, colorScheme);
+
+  const trendArrow = (
+    trend: string
+  ): { icon: keyof typeof Ionicons.glyphMap; color: string } => {
+    const up = ["Increasing", "Improving", "Rising"];
+    const down = ["Decreasing", "Worsening", "Falling", "Declining"];
+    if (up.includes(trend)) return { icon: "arrow-up", color: colors.success };
+    if (down.includes(trend)) return { icon: "arrow-down", color: colors.error };
+    return { icon: "remove", color: colors.textSecondary };
+  };
+
+  return (
+    <View style={[styles.section, { backgroundColor: colors.surface }]}>
+      <View style={styles.sectionHeader}>
+        <Ionicons name="pulse-outline" size={18} color={colors.tint} />
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          Market Momentum
+        </Text>
+      </View>
+
+      <View style={styles.momentumHeader}>
+        <View style={[styles.momentumBadge, { backgroundColor: heatColor + "22" }]}>
+          <Text style={[styles.momentumLabel, { color: heatColor }]}>
+            {trends.marketHeatLabel} Seller Market
+          </Text>
+          <Ionicons
+            name={
+              trends.marketHeatLabel === "Strong"
+                ? "arrow-up"
+                : trends.marketHeatLabel === "Weak"
+                  ? "arrow-down"
+                  : "remove"
+            }
+            size={14}
+            color={heatColor}
+          />
+        </View>
+        <Text style={[styles.heatScore, { color: heatColor }]}>
+          {Math.round(trends.marketHeatScore * 100)}%
+        </Text>
+      </View>
+
+      <View style={[styles.trendGrid, { borderTopColor: colors.border }]}>
+        <TrendRow
+          label="Inventory"
+          value={trends.inventoryTrend}
+          arrow={trendArrow(trends.inventoryTrend)}
+          colors={colors}
+        />
+        <TrendRow
+          label="Days on Market"
+          value={trends.domTrend}
+          arrow={trendArrow(trends.domTrend)}
+          colors={colors}
+        />
+        <TrendRow
+          label="Asking Prices"
+          value={trends.askingPriceTrend}
+          arrow={trendArrow(trends.askingPriceTrend)}
+          colors={colors}
+        />
+        <TrendRow
+          label="Transaction Velocity"
+          value={trends.transactionVelocityTrend}
+          arrow={trendArrow(trends.transactionVelocityTrend)}
+          colors={colors}
+        />
+      </View>
+
+      {trends.avgDaysOnMarket !== null ? (
+        <View style={[styles.avgDomRow, { borderTopColor: colors.border }]}>
+          <Text style={[styles.utilLabel, { color: colors.textSecondary }]}>
+            Avg Model DOM
+          </Text>
+          <Text style={[styles.utilValue, { color: colors.text }]}>
+            {trends.avgDaysOnMarket} days
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function TrendRow({
+  label,
+  value,
+  arrow,
+  colors,
+}: {
+  label: string;
+  value: string;
+  arrow: { icon: keyof typeof Ionicons.glyphMap; color: string };
+  colors: ReturnType<typeof useThemeColors>;
+}) {
+  return (
+    <View style={styles.trendRow}>
+      <Text style={[styles.trendLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <View style={styles.trendValueRow}>
+        <Ionicons name={arrow.icon} size={12} color={arrow.color} />
+        <Text style={[styles.trendValue, { color: arrow.color }]}>{value}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -334,6 +454,56 @@ const styles = StyleSheet.create({
   utilValue: {
     fontSize: 16,
     fontWeight: "600" as const,
+  },
+  momentumHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  momentumBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  momentumLabel: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+  },
+  heatScore: {
+    fontSize: 24,
+    fontWeight: "700" as const,
+  },
+  trendGrid: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    gap: 10,
+  },
+  trendRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  trendLabel: {
+    fontSize: 13,
+  },
+  trendValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  trendValue: {
+    fontSize: 13,
+    fontWeight: "500" as const,
+  },
+  avgDomRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 10,
+    marginTop: 10,
+    gap: 2,
   },
   aiButton: {
     flexDirection: "row",

@@ -36,6 +36,14 @@ ${profile.ownerIntelligence ? `Owner Intelligence:
   Replacement Cycle: ${profile.ownerIntelligence.replacementCycleStatus}
   Fleet Size: ${profile.ownerIntelligence.fleetSize}` : ""}
 
+${profile.modelTrends ? `Model Market Trends (modelId: ${profile.modelTrends.modelId}):
+  Market Heat: ${profile.modelTrends.marketHeatLabel} (${Math.round(profile.modelTrends.marketHeatScore * 100)}%)
+  Avg Days on Market (model): ${profile.modelTrends.avgDaysOnMarket ?? "N/A"}
+  Inventory Trend: ${profile.modelTrends.inventoryTrend}
+  DOM Trend: ${profile.modelTrends.domTrend}
+  Asking Price Trend: ${profile.modelTrends.askingPriceTrend}
+  Transaction Velocity: ${profile.modelTrends.transactionVelocityTrend}` : "Model Market Trends: Not available"}
+
 Respond with EXACTLY this JSON format:
 {
   "summaryMarkdown": "Executive summary paragraph (2-3 sentences, broker voice)",
@@ -48,6 +56,7 @@ Guidelines:
 - keyInsights: "Why it will sell" factors (3-5 bullets)
 - redFlags: "Why it might stall" concerns (1-3 bullets, can be empty array if none)
 - suggestedNextQuestions: What a broker should ask or investigate next
+- Incorporate model market trends using the provided marketHeat and DOM trend signals when discussing timing
 - Use only the provided data. If data is missing, note what's missing.
 - Include Evolution link reference if actionable.`;
 }

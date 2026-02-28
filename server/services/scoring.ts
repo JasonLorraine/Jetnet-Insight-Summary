@@ -2,6 +2,7 @@ import type {
   AircraftProfile,
   HotNotScore,
   ScoringFactor,
+  ModelTrendSignals,
 } from "../../shared/types";
 
 function clamp(val: number, min: number, max: number): number {
@@ -256,9 +257,51 @@ function computeDataCompleteness(profile: AircraftProfile): ScoringFactor {
   };
 }
 
+function computeModelMarketMomentum(profile: AircraftProfile): ScoringFactor {
+  const trends = profile.modelTrends;
+
+  if (!trends) {
+    return {
+      name: "Model Market Momentum",
+      weight: 0,
+      value: 0,
+      explanation: "Model trends data not available (no modelId). Excluded from scoring.",
+    };
+  }
+
+  const heat = trends.marketHeatScore;
+  const parts: string[] = [];
+
+  if (trends.inventoryTrend !== "Stable") {
+    parts.push(`inventory ${trends.inventoryTrend.toLowerCase()}`);
+  }
+  if (trends.domTrend !== "Stable") {
+    parts.push(`DOM ${trends.domTrend.toLowerCase()}`);
+  }
+  if (trends.askingPriceTrend !== "Flat") {
+    parts.push(`pricing ${trends.askingPriceTrend.toLowerCase()}`);
+  }
+  if (trends.transactionVelocityTrend !== "Stable") {
+    parts.push(`velocity ${trends.transactionVelocityTrend.toLowerCase()}`);
+  }
+
+  const trendDetail = parts.length > 0 ? parts.join(", ") : "all signals stable";
+  const avgDomNote = trends.avgDaysOnMarket !== null
+    ? ` Avg model DOM: ${trends.avgDaysOnMarket} days.`
+    : "";
+
+  return {
+    name: "Model Market Momentum",
+    weight: 0.1,
+    value: clamp(heat, 0, 1),
+    explanation: `${trends.marketHeatLabel} market (heat: ${Math.round(heat * 100)}%). Signals: ${trendDetail}.${avgDomNote}`,
+  };
+}
+
 export function computeHotNotScore(profile: AircraftProfile): HotNotScore {
   const factors: ScoringFactor[] = [
     computeModelLiquidity(profile),
+    computeModelMarketMomentum(profile),
     computeDaysOnMarket(profile),
     computeAgeFit(profile),
     computeTransactionPattern(profile),
@@ -268,7 +311,8 @@ export function computeHotNotScore(profile: AircraftProfile): HotNotScore {
   ];
 
   const rawScore = factors.reduce((sum, f) => sum + f.value * f.weight, 0);
-  const score = Math.round(rawScore * 100);
+  const totalWeight = factors.reduce((sum, f) => sum + f.weight, 0);
+  const score = Math.round((rawScore / totalWeight) * 100);
 
   let label: "HOT" | "WARM" | "NEUTRAL" | "COLD";
   if (score >= 80) label = "HOT";

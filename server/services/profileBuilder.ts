@@ -9,6 +9,7 @@ import {
 import { buildEvolutionLink } from "./evolutionLink";
 import { computeHotNotScore } from "./scoring";
 import { computeDisposition } from "./disposition";
+import { fetchModelTrends } from "./modelTrends";
 import type {
   AircraftProfile,
   Relationship,
@@ -16,6 +17,7 @@ import type {
   HistoryEntry,
   UtilizationSummary,
   MarketSignals,
+  ModelTrendSignals,
   FleetAircraft,
 } from "../../shared/types";
 
@@ -129,14 +131,17 @@ export async function buildAircraftProfile(
     throw new Error(`Aircraft not found for registration: ${registration}`);
   }
 
+  const modelId: number | null = ac.modelid || ac.modelId || null;
+
   let flatRelationships = extractRelationshipsFromFlat(ac);
 
-  const [picturesData, relationshipsData, flightData, historyData] =
+  const [picturesData, relationshipsData, flightData, historyData, modelTrendsData] =
     await Promise.allSettled([
       getPictures(aircraftId, session),
       getRelationships(aircraftId, session),
       getFlightDataPaged(aircraftId, session),
       getHistoryListPaged(aircraftId, session),
+      modelId ? fetchModelTrends(modelId, session) : Promise.reject("no modelId"),
     ]);
 
   const pictures =
@@ -171,9 +176,15 @@ export async function buildAircraftProfile(
     marketStatus: ac.marketstatus || null,
   };
 
+  const modelTrends: ModelTrendSignals | null =
+    modelTrendsData.status === "fulfilled"
+      ? (modelTrendsData.value as ModelTrendSignals)
+      : null;
+
   const profile: AircraftProfile = {
     registration: ac.regnbr || registration,
     aircraftId,
+    modelId,
     make: ac.make || "Unknown",
     model: ac.model || "Unknown",
     series: ac.series || null,
@@ -194,6 +205,7 @@ export async function buildAircraftProfile(
     pictures,
     utilizationSummary: utilization,
     marketSignals,
+    modelTrends,
     history,
     ownerIntelligence: null,
     hotNotScore: null,

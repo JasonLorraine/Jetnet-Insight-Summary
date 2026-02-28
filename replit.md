@@ -11,7 +11,7 @@ Aircraft sales intelligence mobile app built with React Native (Expo) and Expres
 ## Key Features
 
 1. **JETNET Integration**: Session-managed authentication with auto-refresh, parallel data fetching (Golden Path)
-2. **Hot/Not Scoring**: Deterministic 0-100 score with 7 weighted factors (liquidity, DOM, age, transactions, utilization, ownership, completeness)
+2. **Hot/Not Scoring**: Deterministic 0-100 score with 8 weighted factors (liquidity, model market momentum, DOM, age, transactions, utilization, ownership, completeness)
 3. **Owner Disposition Intelligence**: Sell probability (0-100) with archetype classification, brand loyalty, replacement cycle, and fleet analysis
 4. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device
 5. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft
@@ -60,7 +60,8 @@ server/
     api.ts                    # JETNET API wrapper functions
   services/
     profileBuilder.ts         # Orchestrates Golden Path parallel fetch
-    scoring.ts                # Hot/Not scoring engine
+    scoring.ts                # Hot/Not scoring engine (8 factors, normalized weights)
+    modelTrends.ts            # Model market trends fetcher (24hr cached)
     disposition.ts            # Owner disposition intelligence
     aiSummary.ts              # AI summary generation (OpenAI + Anthropic)
     evolutionLink.ts          # Evolution deep link builder
