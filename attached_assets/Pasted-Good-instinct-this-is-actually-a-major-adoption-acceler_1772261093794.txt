@@ -1,0 +1,298 @@
+Good instinct — this is actually a **major adoption accelerator** because it connects your new intelligence layer directly back into the tool brokers already trust and live in every day.
+
+What you want is not just a hyperlink.
+
+You want **context-preserving deep linking into JETNET Evolution** so the user moves seamlessly from:
+
+> AI insight → verified source data → workflow action
+
+Below is the engineering write-up you can hand directly to your team.
+
+---
+
+# EVOLUTION DEEP LINK INTEGRATION
+
+## Hot or Not / Disposition Intelligence Platform
+
+---
+
+# 1. Purpose
+
+Provide a one-tap transition from the Hot/Not mobile app or MCP agent output directly into the corresponding aircraft record inside **JETNET Evolution**.
+
+This achieves three things:
+
+1. Reinforces trust (“show me the source”)
+2. Keeps Evolution central to workflow
+3. Converts AI insight into operational action
+
+The philosophy:
+
+> AI recommends. Evolution validates and executes.
+
+---
+
+# 2. User Experience (Broker Flow)
+
+### Mobile App
+
+1. Broker enters tail number
+2. Receives:
+
+   * Hot/Not score
+   * Sell probability
+   * AI broker summary
+3. User taps:
+
+✅ **“Open in Evolution”**
+
+Phone launches Evolution directly to aircraft profile.
+
+---
+
+### AI Agent (MCP Client)
+
+User asks:
+
+> “Evaluate N123AB.”
+
+Response includes:
+
+```
+HOT (82)
+Likely to sell within 9–18 months.
+
+Open in JETNET Evolution →
+```
+
+Clickable deep link opens Evolution web session.
+
+---
+
+# 3. Deep Link Strategy
+
+You must support TWO scenarios:
+
+## A. Web Evolution (Primary)
+
+Most reliable.
+
+Pattern:
+
+```id="evo1"
+https://evolution.jetnet.com/aircraft/{aircraftId}
+```
+
+(or equivalent internal route depending on tenant routing)
+
+### Why aircraftId (NOT registration)
+
+* Registrations change
+* AircraftID is canonical join key
+* Matches Golden Path architecture
+
+Your backend already retrieves this during lookup.
+
+---
+
+## B. Mobile Browser Handoff
+
+If Evolution mobile app exists or future wrapper:
+
+```id="evo2"
+jetnetevolution://aircraft/{aircraftId}
+```
+
+Fallback:
+
+* If scheme unavailable → open web URL.
+
+---
+
+# 4. Backend Implementation
+
+## Add to AircraftProfile Response
+
+Extend normalized object:
+
+```json id="evo3"
+{
+  "aircraftId": 123456,
+  "registration": "N123AB",
+  "evolutionLink": "https://evolution.jetnet.com/aircraft/123456"
+}
+```
+
+Generated server-side only.
+
+---
+
+## Service Function
+
+Create:
+
+```
+/services/evolutionLinkBuilder.ts
+```
+
+Logic:
+
+```ts
+export function buildEvolutionLink(aircraftId: number) {
+  return `${EVOLUTION_BASE_URL}/aircraft/${aircraftId}`;
+}
+```
+
+Environment variable:
+
+```
+EVOLUTION_BASE_URL
+```
+
+Allows staging vs production.
+
+---
+
+# 5. MCP Tool Enhancement
+
+Update outputs for:
+
+### `jet_profile_by_registration`
+
+### `hot_or_not_by_registration`
+
+### `predict_owner_disposition`
+
+Add:
+
+```json id="evo4"
+"evolutionLink": "https://evolution.jetnet.com/aircraft/123456"
+```
+
+Agents will automatically render this as actionable navigation.
+
+---
+
+# 6. AI Prompt Enhancement
+
+Add instruction inside broker summary prompt:
+
+> If an evolutionLink is present, include a short closing sentence directing the user to verify details in Evolution.
+
+Example output:
+
+> Full ownership and transactional validation can be reviewed directly in Evolution.
+
+---
+
+# 7. Security Considerations
+
+Important:
+
+✅ DO:
+
+* Link only using aircraftId
+* Require user to already be authenticated in Evolution
+* Allow Evolution login redirect if session expired
+
+❌ DO NOT:
+
+* Pass auth tokens
+* Embed credentials
+* Attempt SSO spoofing
+
+Evolution remains authority.
+
+---
+
+# 8. UX Placement (Apple-Style)
+
+Placement matters.
+
+### Aircraft Header Card
+
+```
+N123AB
+Gulfstream G650ER
+HOT • 82
+────────────────────
+Open in Evolution →
+```
+
+Design rules:
+
+* subtle chevron
+* system blue accent
+* no heavy button styling
+* feels native, not promotional
+
+---
+
+# 9. Strategic Outcome
+
+This integration does something important internally:
+
+Hot/Not does NOT compete with Evolution.
+
+It becomes:
+
+```
+Discovery + Intelligence Layer
+            ↓
+      Evolution Execution Layer
+```
+
+You are extending Evolution’s reach rather than replacing it.
+
+---
+
+# 10. Future Enhancements (Phase 2)
+
+Once stable:
+
+### A. Context Return Link
+
+Evolution launches Hot/Not with:
+
+```
+hotornot://aircraft/{aircraftId}
+```
+
+### B. CRM Jump
+
+From Hot/Not:
+
+* Open Salesforce record
+* Open broker pipeline
+* Launch outreach workflow
+
+### C. “Why Now?” Banner Inside Evolution
+
+Eventually surfaced natively.
+
+---
+
+# 11. Engineering Tasks Summary
+
+1. Add `evolutionLinkBuilder`
+2. Extend normalized aircraft profile
+3. Inject link into MCP outputs
+4. Add UI header action
+5. Update AI summary template
+6. Add environment config support
+
+---
+
+## Why this is bigger than it looks
+
+Without this link:
+Hot/Not feels experimental.
+
+With this link:
+Hot/Not feels like **Evolution’s intelligence engine**.
+
+That psychological shift dramatically increases internal acceptance.
+
+---
+
+If you want next, I’ll show you the **one feature that will make Evolution users instantly addicted** to this system — something brokers will check every morning without being asked.

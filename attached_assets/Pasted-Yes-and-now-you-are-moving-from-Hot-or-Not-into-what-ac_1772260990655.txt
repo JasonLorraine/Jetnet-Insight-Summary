@@ -1,0 +1,337 @@
+Yes — and now you are moving from **“Hot or Not”** into what actually becomes powerful:
+
+> a **Disposition Intelligence Skill**
+> (not just aircraft scoring, but *seller behavior prediction*).
+
+What you’re describing is exactly what brokers intuitively do in their heads. We just need to formalize it into deterministic signals the AI can explain.
+
+Below is the upgraded **Skill Design v2** that your engineer can implement directly.
+
+---
+
+# HOT OR NOT → DISPOSITION INTELLIGENCE SKILL (v2)
+
+## Expanded Goal
+
+Rate the aircraft **AND** answer:
+
+* How long has the owner held it?
+* What type of owner are they?
+* Are they likely approaching replacement cycle?
+* When are they statistically likely to sell?
+* Is this a proactive outreach opportunity?
+
+This becomes a **lead-generation engine**, not just analysis.
+
+---
+
+# 1. NEW DATA DIMENSIONS (Added to Profile)
+
+Your `AircraftProfile` normalization layer must now include:
+
+### Ownership Timeline
+
+Derived from transaction history.
+
+Fields:
+
+```
+purchaseDate
+ownershipLengthDays
+ownershipLengthYears
+previousOwnersCount
+ownershipSequenceNumber
+```
+
+How:
+
+* Use transaction history endpoint
+* Find last “Full Sale”
+* Calculate:
+
+```text
+ownershipLength = today - purchaseDate
+```
+
+---
+
+### Owner History (Critical)
+
+Build owner behavior profile:
+
+```
+ownerCompanyId
+fleetSize
+priorAircraftOwned[]
+avgOwnershipDuration
+upgradePattern
+brandHistory[]
+```
+
+This is where JETNET becomes uniquely powerful.
+
+---
+
+### Brand Loyalty Index
+
+Measure how consistently an owner stays with OEM.
+
+Example logic:
+
+```
+Brand Loyalty Score =
+(# aircraft same OEM historically) /
+(total aircraft owned)
+```
+
+Outputs:
+
+* HIGH (≥70%)
+* MODERATE
+* LOW / Opportunistic
+
+Why brokers care:
+
+* Gulfstream owner likely upgrades Gulfstream.
+* Citation owner rarely jumps directly to Global.
+
+---
+
+### Replacement Cycle Signal
+
+Most owners follow patterns:
+
+| Segment          | Typical Hold |
+| ---------------- | ------------ |
+| Light Jet        | 4–7 yrs      |
+| Mid              | 5–8 yrs      |
+| Large Cabin      | 7–12 yrs     |
+| Ultra Long Range | 8–15 yrs     |
+
+Compute:
+
+```
+cycleRatio =
+ownershipLength /
+expectedOwnershipCycle(modelCategory)
+```
+
+Interpretation:
+
+* <0.6 → early ownership
+* 0.6–1.0 → watch zone
+* > 1.0 → replacement window
+
+---
+
+# 2. OWNER DISPOSITION SCORE (NEW)
+
+Add second score alongside Hot/Not.
+
+## Owner Sell Probability (0–100)
+
+### Factors
+
+#### A. Ownership Age vs Cycle — 30 pts
+
+Most predictive variable.
+
+#### B. Historical Upgrade Behavior — 20 pts
+
+Owner sells regularly → high probability.
+
+#### C. Fleet Expansion/Reduction — 15 pts
+
+Fleet shrink often precedes sale.
+
+#### D. Brand Loyalty Upgrade Path — 15 pts
+
+OEM launches trigger upgrades.
+
+#### E. Utilization Trend — 10 pts
+
+Declining use often precedes listing.
+
+#### F. Market Timing Alignment — 10 pts
+
+Strong market increases likelihood of selling.
+
+---
+
+### Output
+
+```
+sellProbability: 74
+sellWindowEstimate: "9–18 months"
+confidence: 0.81
+```
+
+---
+
+# 3. OWNER HISTORY PANEL (UI + MCP OUTPUT)
+
+Add new section:
+
+## Owner Intelligence
+
+Show:
+
+* Purchase date
+* Length of ownership
+* Previous aircraft owned
+* Average hold time
+* Brand loyalty indicator
+* Upgrade pattern
+
+Example MCP output:
+
+```json
+{
+  "ownerIntelligence": {
+    "purchaseDate": "2018-06-12",
+    "ownershipYears": 7.4,
+    "avgOwnershipYears": 6.8,
+    "brandLoyalty": "HIGH",
+    "priorAircraft": ["G450", "G550"],
+    "upgradePattern": "Incremental OEM upgrades",
+    "sellProbability": 74,
+    "predictedSellWindow": "9–18 months"
+  }
+}
+```
+
+---
+
+# 4. PICTURES (YES — but strategically)
+
+Pictures are not cosmetic.
+
+They influence perceived sellability.
+
+### Add Image Signals
+
+From picture endpoint:
+
+Compute:
+
+* imageCount
+* recency (if metadata exists)
+* interior/exterior presence
+
+Signal:
+
+```
+listingReadinessScore
+```
+
+Aircraft with professional imagery historically sell faster.
+
+Add small boost to Hot score.
+
+---
+
+# 5. PREDICTIVE SELL MODEL (Important Philosophy)
+
+This is NOT ML initially.
+
+Start deterministic.
+
+Prediction formula:
+
+```
+Sell Probability =
+(OwnershipCycleScore * 0.35)
++ (OwnerBehaviorScore * 0.25)
++ (UtilizationTrend * 0.15)
++ (MarketStrength * 0.15)
++ (BrandUpgradePressure * 0.10)
+```
+
+LLM explains prediction.
+Math produces prediction.
+
+---
+
+# 6. NEW MCP TOOL
+
+## Tool
+
+`predict_owner_disposition`
+
+### Input
+
+```json
+{
+  "registration": "N123AB"
+}
+```
+
+### Output
+
+```json
+{
+  "sellProbability": 74,
+  "predictedWindowMonths": [9,18],
+  "ownershipCycleStatus": "Replacement Window",
+  "brandUpgradeLikelihood": "High",
+  "confidence": 0.81,
+  "explanationFactors": []
+}
+```
+
+---
+
+# 7. Updated HOT/NOT Meaning
+
+Hot/Not now becomes:
+
+### HOT = Easy to Sell
+
+### SELL SIGNAL = Likely to Enter Market Soon
+
+Together they answer:
+
+> “Should I call this owner today?”
+
+That is enormously valuable.
+
+---
+
+# 8. Why This Is Extremely Powerful (Strategically)
+
+You are now combining:
+
+* Aircraft liquidity
+* Owner psychology
+* Historical behavior
+* Market timing
+
+No competitor exposes this unified signal.
+
+Most tools answer:
+
+> “What is this aircraft?”
+
+You answer:
+
+> “What will happen next?”
+
+---
+
+# 9. The Next Step I Recommend (Very Important)
+
+Before engineers build:
+
+We should define the **Owner Archetypes** your AI will classify automatically:
+
+Examples:
+
+* Serial Upgrader
+* Long-Term Holder
+* Opportunistic Seller
+* Corporate Fleet Optimizer
+* Lifestyle Owner
+
+This becomes the language brokers immediately understand.
+
+If you want, I’ll design that classification system next — it will massively improve adoption because brokers will trust it instantly.
