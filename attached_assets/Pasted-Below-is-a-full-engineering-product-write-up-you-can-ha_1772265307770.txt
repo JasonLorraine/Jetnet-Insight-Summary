@@ -1,0 +1,461 @@
+Below is a **full engineering + product write-up** you can hand directly to your dev team (or drop into the repo as `/docs/FLIGHT_ANALYZER_SPEC.md`).
+This is written specifically against how your **Jetnet-Insight-Summary** app already behaves: tail-number driven → progressive loading → AI summary generation.
+
+The goal is **not adding another button**.
+The goal is introducing a **second intelligence pipeline** that feels native to the product.
+
+---
+
+# ✈️ Flight Intelligence Analyzer
+
+## Full Implementation Specification
+
+**Project:** Jetnet Insight Summary (iOS First)
+**Feature:** Flight Data AI Analyzer
+**Owner:** Product / Engineering
+**Status:** Implementation Ready
+
+---
+
+# 1. Objective
+
+Extend the existing **Generate AI Summary** workflow by introducing a second analysis path powered by historical flight activity.
+
+Users will now have two analysis options:
+
+1. **Generate AI Summary**
+
+   * Ownership
+   * Market
+   * Transactions
+   * Model trends
+   * Operator intelligence
+
+2. **Generate Flight Data Summary (NEW)**
+
+   * 12-month operational behavior analysis
+   * Utilization patterns
+   * Movement intelligence
+   * Sale prediction signals
+   * Behavioral scoring
+
+This creates a separation between:
+
+| Mode            | Purpose                   |
+| --------------- | ------------------------- |
+| Insight Summary | WHO owns + market meaning |
+| Flight Summary  | HOW aircraft behaves      |
+
+---
+
+# 2. User Experience Flow (iOS)
+
+## Current Flow
+
+```
+Enter Tail Number
+   ↓
+Generate AI Summary
+   ↓
+Insight appears
+```
+
+## New Flow
+
+```
+Enter Tail Number
+   ↓
+Tap "Generate AI Summary"
+   ↓
+Action Sheet Appears:
+
+• Generate Summary
+• Generate Flight Data Summary
+```
+
+---
+
+## Apple UX Requirement
+
+Use native iOS **Action Sheet** (NOT modal screen).
+
+Reason:
+
+* preserves context
+* feels lightweight
+* aligns with Apple decision pattern
+
+---
+
+# 3. Default Flight Data Behavior
+
+### Automatically Request:
+
+**GetFlightData → Last 12 Months**
+
+No user configuration required.
+
+---
+
+## Date Logic
+
+```
+endDate = Today
+startDate = Today - 365 days
+```
+
+Example:
+
+```
+Start: 03/01/2025
+End:   03/01/2026
+```
+
+---
+
+# 4. API Integration
+
+## Endpoint
+
+```
+GET /api/Flight/getFlightData
+```
+
+(or your repo wrapper equivalent)
+
+---
+
+## Request Parameters
+
+```
+{
+  regnbr: <tailNumber>,
+  startdate: <today - 365>,
+  enddate: <today>
+}
+```
+
+---
+
+## Engineering Rule
+
+Flight data download runs:
+
+✅ asynchronously
+✅ background worker
+✅ cached locally
+
+Never block UI.
+
+---
+
+# 5. Data Pipeline Architecture
+
+Create new analyzer layer:
+
+```
+/services/analyzers/
+    flightAnalyzer.ts
+```
+
+---
+
+## Pipeline
+
+```
+User Request
+   ↓
+Fetch Flight Data (1yr)
+   ↓
+Normalize Flights
+   ↓
+Behavior Extraction
+   ↓
+AI Prompt Builder
+   ↓
+LLM Analysis
+   ↓
+Flight Intelligence Summary
+```
+
+---
+
+# 6. Flight Analyzer Responsibilities
+
+The analyzer converts raw flights into signals.
+
+### Extract:
+
+#### Utilization
+
+* Flights per month
+* Hours trend
+* Seasonal usage
+
+#### Operational Pattern
+
+* Home airport stability
+* Route repetition
+* Geographic clustering
+
+#### Ownership Signals
+
+* Reduced flying trend
+* Increased repositioning
+* Charter-like behavior
+
+#### Market Signals
+
+* Activity decline
+* Sudden inactivity
+* Pre-sale patterns
+
+---
+
+# 7. Derived Metrics (Must Compute)
+
+Engineering creates computed fields:
+
+```
+avgFlightsPerMonth
+uniqueAirports
+primaryBaseAirport
+routeRepetitionScore
+activityTrendSlope
+downtimePeriods
+internationalRatio
+```
+
+---
+
+# 8. AI Prompt Construction
+
+Create dedicated prompt builder:
+
+```
+/ai/prompts/flightSummaryPrompt.ts
+```
+
+---
+
+### Prompt Structure
+
+System Role:
+
+```
+You are an aviation operational intelligence analyst.
+Analyze aircraft behavior patterns from flight activity.
+Focus on operational intent, ownership signals, and sale probability.
+```
+
+User Payload:
+
+```
+Aircraft: NXXXX
+Flights last 12 months: ###
+Primary Base: KTEB
+Monthly Trend: decreasing
+Top Routes: KTEB-KPBI recurring
+Idle Periods: 60+ days detected
+```
+
+---
+
+### Output Required
+
+AI must return:
+
+```
+Operational Summary
+Utilization Assessment
+Behavior Pattern
+Owner Intent Prediction
+Sale Probability Insight
+Confidence Level
+```
+
+---
+
+# 9. UI Presentation
+
+Create new card stack:
+
+```
+Flight Intelligence
+```
+
+---
+
+## Layout Order
+
+1. Operational Verdict (headline)
+2. Activity Trend Graph
+3. Base Airport Insight
+4. Behavioral Narrative
+5. Prediction Section
+
+---
+
+## Visual Treatment (Apple Style)
+
+* Graph animates in
+* Numbers count upward
+* Sections appear sequentially
+* No tables initially visible
+
+---
+
+# 10. Loading Experience
+
+When user selects:
+
+**Generate Flight Data Summary**
+
+Show staged loading:
+
+```
+✓ Downloading Flight Activity
+✓ Analyzing Operational Patterns
+✓ Generating Intelligence
+```
+
+Each step appears progressively.
+
+No spinner.
+
+---
+
+# 11. Caching Rules
+
+Flight data expensive → cache aggressively.
+
+```
+cacheKey = regnbr + last365
+TTL = 24 hours
+```
+
+If cached:
+→ Skip download
+→ Re-run AI only.
+
+---
+
+# 12. Error Handling
+
+If flight data unavailable:
+
+Display:
+
+> “Flight activity unavailable for this aircraft. Insight generated from ownership data only.”
+
+Never show API errors.
+
+---
+
+# 13. Repository Changes
+
+### New Files
+
+```
+/services/analyzers/flightAnalyzer.ts
+/ai/prompts/flightSummaryPrompt.ts
+/components/FlightSummaryView.tsx
+/hooks/useFlightAnalysis.ts
+```
+
+---
+
+### Modified Files
+
+```
+GenerateSummaryButton.tsx
+AIService.ts
+AircraftScreen.tsx
+```
+
+---
+
+# 14. Button Logic
+
+Replace single action:
+
+```
+onPressGenerate()
+```
+
+With:
+
+```
+presentActionSheet([
+  "Generate Summary",
+  "Generate Flight Data Summary"
+])
+```
+
+---
+
+# 15. Performance Targets
+
+| Stage       | Target             |
+| ----------- | ------------------ |
+| API Fetch   | < 3 sec            |
+| Processing  | < 500ms            |
+| AI Response | < 6 sec            |
+| Total UX    | < 10 sec perceived |
+
+---
+
+# 16. Future Expansion (Already Compatible)
+
+This architecture enables later:
+
+✅ SkyView integration
+✅ Live tracking scoring
+✅ Charter detection
+✅ Maintenance inference
+✅ Domicile prediction
+
+---
+
+# 17. Product Impact
+
+Before:
+
+> Static intelligence snapshot
+
+After:
+
+> Behavioral aircraft intelligence engine
+
+You now answer:
+
+* Is this aircraft active?
+* Is ownership changing?
+* Is it preparing for sale?
+
+---
+
+# 18. Why This Matters (Strategically)
+
+This moves Jetnet Insight Summary from:
+
+**database viewer**
+→
+**decision intelligence tool**
+
+Competitors show records.
+
+You show intent.
+
+---
+
+## Recommended Next Step
+
+If you want, I can now design the **Flight Intelligence Score (0–100)** model that merges:
+
+* Market data
+* Ownership duration
+* Flight behavior
+* Model trends
+
+That becomes your signature metric.
