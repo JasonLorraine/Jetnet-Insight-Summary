@@ -1,0 +1,285 @@
+## Goal
+
+Make the app materially more useful to a broker by surfacing **the right company + contact intel** and providing **one-click actions** to email, text, or call, ideally powered by **`getRelationships`** so the broker sees the full people graph around an aircraft, owner, operator, manager, and related entities.
+
+## Problem
+
+Right now most “tail-number lookup” apps stop at aircraft specs and maybe a single owner record. Brokers need a **relationship map** and a **contact action layer**. Without that, they cannot do the next step: outreach.
+
+## Information
+
+In your JETNET Connect ecosystem, the only way to “paint the whole picture” is to treat `ACID` (aircraft) and `COMPANYID` as anchors, then fan out via relationships to the people and entities that matter. You already have the building blocks in the API Hub project and help docs. The key is a workflow that:
+
+1. gets the “right” aircraft entity
+2. identifies the companies attached to it (owner, operator, manager, lessee, etc.)
+3. pulls the human contacts via **relationships**
+4. ranks and packages those contacts for outreach
+
+## Solution
+
+Below is the plan you can hand to engineering.
+
+---
+
+# Plan: Relationship-First Contact Surfacing
+
+## 1) Define the broker outcomes you are optimizing for
+
+Each screen should answer one of these:
+
+1. Who is most likely to know about this aircraft right now?
+2. Who can approve a transaction or introduce me to the decision-maker?
+3. What is the cleanest way to contact them today?
+
+This drives what you pull and how you rank it.
+
+---
+
+## 2) API workflow (canonical call chain)
+
+### Step A: Resolve the aircraft anchor
+
+Input: `regNbr`
+
+Calls (example flow, adjust to your exact endpoint names in your Hub):
+
+1. `getRegNum` or `getAircraftList` (regNbr search)
+2. `getAircraft` (by ACID) to get canonical aircraft details
+   Output: `ACID`, `MODELID`, current associated `COMPANYID` if present, and any operator/manager company IDs if your payload includes them.
+
+Key rule:
+
+* Do not assume the first record is canonical. If API can return multiple hits (historical, variants), pick the record flagged current, active, or with the most complete identity fields.
+
+---
+
+### Step B: Pull company entities attached to the aircraft
+
+You want all company “roles” tied to the aircraft. There are two approaches:
+
+**Preferred (if available):**
+
+* `getRelationships` using `ACID` as the anchor, filtered to company relationships.
+
+**Fallback:**
+
+* If your aircraft endpoint already returns owner/operator/manager company IDs, call:
+
+  * `getCompanyList` (company IDs list)
+
+Output: company nodes with enough detail to display:
+
+* company name
+* DBA
+* HQ/base geography
+* website and main phone if available
+* company type (owner, operator, management company, broker, lessor, etc.)
+* notes and tags if present
+
+---
+
+### Step C: Pull PEOPLE via getRelationships
+
+This is the meat.
+
+Call:
+
+* `getRelationships` anchored on:
+
+  1. `ACID` (directly connected people)
+  2. each relevant `COMPANYID` (people at the companies you care about)
+
+Filter your relationship types to the ones that matter to a broker:
+
+* Aircraft owner contacts
+* Operator contacts
+* Management contacts
+* Finance and accounting contacts
+* Executive contacts
+* Maintenance and DOM contacts
+* Aviation department contacts
+* Scheduling and dispatch (useful in operational buyer signals)
+
+Output: a relationship list with fields like:
+
+* `CONTACTID`
+* relationship type / role
+* relationship confidence or status (active vs historical if available)
+* source entity (company or aircraft)
+
+Then call:
+
+* `getContactList` by `CONTACTID` list to hydrate full contact cards.
+
+---
+
+## 3) Contact “hydration” model
+
+A broker contact card should include:
+
+Minimum:
+
+* full name
+* title
+* company name
+* email
+* phone (mobile vs office if provided)
+* location
+* relationship role label
+* “last updated” or freshness if available
+
+Nice to have:
+
+* assistant name and contact (if in data)
+* LinkedIn URL or a placeholder action to search
+* “preferred contact method” if your data supports it
+* notes and last interaction if you add a CRM layer later
+
+---
+
+## 4) Ranking and surfacing recommendations (make it broker-smart)
+
+### A. Create a contact priority score
+
+Compute a score per contact. Make it explainable.
+
+Inputs (example weights):
+
+* Role relevance (owner principal, chief pilot, DOM, CFO, scheduler, etc.)
+* Title seniority (C-level, VP, Director)
+* Directness (direct aircraft relationship beats company-only relationship)
+* Freshness (relationship updated recently)
+* Reachability (has email + mobile)
+* Non-generic email domain (less “info@”, more personal)
+
+Output:
+
+* Priority tier: “Primary”, “Secondary”, “Operational”, “Finance”, “Back pocket”
+
+### B. Group contacts into broker workflows
+
+Instead of a flat list, use buckets:
+
+1. Decision Makers
+2. Aviation Department (Chief Pilot, DOM, Scheduler)
+3. Finance and Admin (CFO, Controller, AP)
+4. Maintenance and Ops Partners (MRO, management company)
+5. Other Known Associates (historical or indirect)
+
+This is what makes it feel like a broker tool, not a directory.
+
+---
+
+## 5) Outreach actions: email, text, call
+
+On each contact card:
+
+* Call: `tel:` link
+* Text: `sms:` link (iOS supports `sms:` and a prefilled body in many contexts)
+* Email: `mailto:` link with prefilled subject/body
+
+Pre-fill message templates based on the context:
+
+* Tail number
+* aircraft model
+* quick reason for outreach
+* your signature block
+
+Examples of prefill subjects:
+
+* “Quick question on N491N”
+* “Availability and ownership timeline for N491N”
+* “Market interest in your [Model]”
+
+Body should be short, human, and clearly optional.
+
+Important guardrails:
+
+* Add a tiny UI label like “Confirm before sending” and always open the native composer. Never auto-send.
+
+---
+
+## 6) UX: where to surface this so it feels premium
+
+### Aircraft Summary screen: add a “People” module
+
+Above the fold:
+
+* “Top contacts” (3 cards)
+* “View all relationships” (tap opens full list and graph)
+
+### Company Profile screens: add “Org Contacts” module
+
+* shows top 5 by priority score
+* filter chips: Exec, Aviation, Finance, Ops
+
+### Relationship Graph (optional but high value)
+
+A simple graph view:
+
+* aircraft node
+* company nodes
+* contact nodes
+  Tap a node to open the card. This makes your “getRelationships” investment obvious.
+
+---
+
+## 7) Data and compliance notes (keep you out of trouble)
+
+* Treat contact data as sensitive business data.
+* Do not display personal phone numbers if your licensing terms restrict it.
+* For texting, consider a warning about consent and local laws. Keep it general and non-legal-advice-y, but the product should nudge ethical outreach.
+
+---
+
+## 8) Implementation sequencing (fastest path to value)
+
+Phase 1: Simple contact surfacing
+
+* Call chain: aircraft → companies → relationships → contacts
+* Buckets + top contacts + email/call/text actions
+
+Phase 2: Scoring and templates
+
+* Add priority scoring
+* Add message templates per bucket
+* Add “copy contact details” quick action
+
+Phase 3: Relationship graph + CRM hooks
+
+* Graph view
+* Export to HubSpot/Salesforce object mapping if needed later
+
+---
+
+## 9) What to build in your repo, concretely
+
+Create these modules and keep them clean:
+
+Backend:
+
+* `relationshipService.ts`
+
+  * `getRelationshipsByAircraft(acid)`
+  * `getRelationshipsByCompany(companyId)`
+  * `hydrateContacts(contactIds)`
+  * `buildContactRecommendations(context)`
+
+Frontend:
+
+* `ContactCard`
+* `ContactBuckets`
+* `TopContactsCarousel`
+* `RelationshipGraphView` (optional)
+* `OutreachComposer` (generates mailto/sms bodies)
+
+Data contracts:
+
+* `RelationshipEdge`
+* `ContactNode`
+* `CompanyNode`
+* `BrokerContactRecommendation`
+
+---
+
+If you paste the exact `getRelationships` signature from your Swagger or API Hub docs (request body and response shape), I’ll turn the above into a concrete “endpoint wiring spec” with the precise payloads, filters, and a deterministic scoring rubric tied to your actual fields.

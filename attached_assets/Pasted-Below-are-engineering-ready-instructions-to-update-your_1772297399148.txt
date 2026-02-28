@@ -1,0 +1,313 @@
+Below are **engineering-ready instructions** to update your app so it uses:
+
+`POST /api/Aircraft/getRelationships/{{apiToken}}`
+
+as the **primary Company + Contact enrichment layer**, and then surfaces broker-first outreach actions (email/text/call) with smart ranking.
+
+I’m writing this as a build plan your devs can execute.
+
+---
+
+## Goal
+
+When a user enters a tail number, the app should return:
+
+1. Aircraft profile (baseline)
+2. **Relationship graph** (Aircraft → Companies → Contacts with roles) via `getRelationships`
+3. Broker-optimized “Top people to contact” with **tap-to-email / tap-to-text / tap-to-call**
+
+---
+
+## Problem
+
+You currently don’t reliably enrich the aircraft with the **people graph**, so the broker can’t do the next step (outreach) inside the app.
+
+---
+
+## Solution Architecture
+
+### New data flow (happy path)
+
+**Tail Number → ACID → getRelationships → normalize → rank → UI**
+
+You will still use existing aircraft calls to resolve ACID, but the **truth source for people + company associations becomes getRelationships.**
+
+---
+
+# Backend Implementation
+
+## 1) Add a new service: `relationshipsService.ts`
+
+### Function: `getRelationshipsByAcids(apiToken, acids[])`
+
+* Endpoint:
+
+  * `POST https://customer.jetnetconnect.com/api/Aircraft/getRelationships/{{apiToken}}`
+* Body:
+
+  * `{ "aclist": [ACID...] }`
+
+Return raw payload.
+
+**Guardrails**
+
+* Validate `aclist.length > 0`
+* Batch support: accept up to whatever limit you’ve observed (start with 500)
+* If empty results, return `[]` (do not throw)
+
+### Function: `normalizeRelationships(raw)`
+
+Normalize into deterministic graph objects:
+
+* `AircraftNode`: `{ acid, regNbr }`
+* `CompanyNode`: `{ companyId, companyName?, role? }` *(role may live on the edge)*
+* `ContactNode`: `{ contactId, firstName, lastName, title, email, phoneMobile?, phoneOffice? }`
+* `RelationshipEdge`: `{ acid, companyId?, contactId?, relationshipType }`
+
+**Dedup rules**
+
+* Companies: `companyId`
+* Contacts: `contactId`
+* Edges: `acid + companyId + contactId + relationshipType` (or best available)
+
+### Function: `buildBrokerContactRecommendations(graph, context)`
+
+Returns a ranked list:
+
+`[{ contactId, companyId, relationshipType, score, reasons[], preferredChannels[] }]`
+
+---
+
+## 2) Add a broker scoring engine: `brokerContactRanker.ts`
+
+### Inputs
+
+* RelationshipType (Operator, Owner, Manager, etc.)
+* Title (C-level, Director, Chief Pilot, DOM, Scheduler, Controller)
+* Has email
+* Has mobile
+* Directness (edge tied to ACID vs only company)
+* Optional freshness (if response includes updated timestamps)
+
+### Outputs
+
+* `score` (0–100)
+* `tier`: `Primary | Aviation Ops | Finance/Admin | Secondary | Historical`
+* `preferredChannels`: `["email", "sms", "call"]`
+* `reasons`: short strings used in UI
+
+**Baseline weighting (start simple)**
+
+* +30 if relationshipType in {Owner, Operator, Manager}
+* +15 if title contains {Chief Pilot, Director of Aviation, DOM, Scheduler}
+* +15 if title contains {CFO, Controller, Finance}
+* +20 if email exists
+* +10 if mobile exists
+* +10 if direct aircraft relationship edge
+
+Then clamp to 100.
+
+---
+
+## 3) Add new API route: `/api/intel/relationships/:regNbr`
+
+### Route behavior
+
+1. Resolve tail → ACID via your existing flow:
+
+   * `getAircraftList` / `getCondensed` / `getAircraft` (whatever you already use)
+2. Call `getRelationships` with `aclist: [acid]`
+3. Normalize to graph
+4. Rank contacts
+5. Return a single response payload the UI can render directly
+
+### Response contract (recommendation)
+
+```json
+{
+  "regNbr": "N601BE",
+  "acid": 7103,
+  "relationships": {
+    "companies": [],
+    "contacts": [],
+    "edges": []
+  },
+  "recommendations": [
+    {
+      "contactId": 67890,
+      "companyId": 12345,
+      "relationshipType": "Operator",
+      "tier": "Primary",
+      "score": 92,
+      "reasons": ["Operator relationship", "Chief Pilot title", "Email available"],
+      "preferredChannels": ["email", "call"]
+    }
+  ]
+}
+```
+
+**Important:** Never 404 for “no relationships.” Return empty arrays with `recommendations: []`.
+
+---
+
+## 4) Caching
+
+Relationships change slower than flight activity.
+
+Recommended cache TTL:
+
+* `24h` default
+* bust cache on explicit “Refresh” in UI
+
+Cache key:
+
+* `relationships:{acid}`
+
+---
+
+# Frontend Implementation (iOS-first)
+
+## 5) Add a new “People” section to the Aircraft results screen
+
+### Above-the-fold module: “Top Contacts”
+
+Show 3–5 contacts max:
+
+* Name, Title, Company
+* Role badge (Owner / Operator / Manager)
+* Quick actions:
+
+  * Call
+  * Text (if mobile)
+  * Email
+
+Add buttons:
+
+* “View all contacts”
+* “View relationship map” (optional phase 2)
+
+### Contact row actions (native)
+
+* Call: `tel://{number}`
+* Text: `sms:{number}`
+* Email: `mailto:{email}?subject=...&body=...`
+
+No auto-send. Always open native composer.
+
+---
+
+## 6) Add “Broker Outreach Templates”
+
+When the broker taps Email or Text, prefill based on context.
+
+### Email subject templates
+
+* `Quick question on {regNbr}`
+* `{regNbr} – availability / ownership timeline`
+* `Interest in your {model}`
+
+### Email body (short, broker voice)
+
+* include tail number, model, and a single ask
+* signature placeholders
+
+Example:
+
+* “Hi {FirstName} — I’m reaching out about {regNbr}. Do you have 5 minutes this week for a quick question on the aircraft / availability? Thanks, {YourName}”
+
+Keep it concise.
+
+---
+
+## 7) “All Contacts” screen (broker useful filters)
+
+List all recommended contacts with:
+
+Filter chips:
+
+* Primary
+* Aviation Ops
+* Finance/Admin
+* Secondary
+
+Sort:
+
+* by `score desc` then alphabetically
+
+Include search by:
+
+* name
+* company
+* title
+
+---
+
+# Data Quality + Edge Cases
+
+## 8) Handle duplicates and conflicting roles
+
+If the same person appears multiple times:
+
+* show one contact card
+* show multiple role badges (Owner + Operator)
+
+If company appears without contacts:
+
+* show company card with:
+
+  * company name
+  * role(s)
+  * “No contacts available” label
+
+If contacts appear without email/phone:
+
+* still show, but disable actions and show “No direct contact method on file.”
+
+---
+
+# Phase 2 Enhancements (optional but high leverage)
+
+## 9) Relationship Graph View
+
+Simple 3-layer graph:
+
+* Aircraft in center
+* Company nodes around
+* Contacts per company
+
+Tap a node → opens profile + actions
+
+## 10) Broker “Contact Pack” export
+
+One button:
+
+* “Copy Contact Pack”
+  Copies a formatted block the broker can paste into email/CRM.
+
+Example output:
+
+* Primary contacts with emails/phones
+* Relationship types
+* Companies
+
+---
+
+# Dev Checklist (definition of done)
+
+1. Endpoint wired: `/api/Aircraft/getRelationships/{{apiToken}}`
+2. Normalize graph objects + dedup
+3. Ranking engine returns stable tiers + reasons
+4. UI shows Top Contacts with actions
+5. All Contacts screen with filters and search
+6. No red error states for missing relationships
+7. Cache implemented with refresh control
+
+---
+
+## Next step
+
+If you paste **one real sample response** from `getRelationships` (even redacted), I’ll generate:
+
+* the exact TypeScript interfaces,
+* the normalize/dedup code,
+* and the scoring rules mapped to your *actual* fields (so engineering isn’t guessing).
