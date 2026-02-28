@@ -2,7 +2,6 @@ import React, { useRef, useEffect } from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
   Linking,
@@ -751,17 +750,13 @@ export function SpecsIntelTab({
   let staggerIdx = 0;
 
   return (
-    <ScrollView
-      style={sectionStyles.scrollView}
-      contentContainerStyle={sectionStyles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={sectionStyles.scrollContent}>
       {sectionOrder.map((key) => {
         const element = renderSection(key, staggerIdx);
         if (element) staggerIdx++;
         return element;
       })}
-    </ScrollView>
+    </View>
   );
 }
 

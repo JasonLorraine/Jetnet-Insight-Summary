@@ -9,11 +9,14 @@ import {
   Platform,
   Linking,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useThemeColors, getScoreColor } from "@/constants/colors";
 import { SkeletonLine } from "@/components/skeletons/SkeletonLine";
 import { ContentReveal } from "@/components/ContentReveal";
+import { CompanyCard } from "@/components/CompanyCard";
+import { FleetItem } from "@/components/FleetItem";
 import type { AircraftProfile, AircraftPicture } from "@/shared/types";
 
 interface OverviewTabProps {
@@ -28,8 +31,13 @@ function PhotoSkeleton() {
 
   return (
     <View style={[photoStyles.skeleton, { backgroundColor: colors.secondaryBackground }]}>
-      <Ionicons name="camera-outline" size={40} color={colors.tertiaryLabel} style={photoStyles.iconFaded} />
-      <SkeletonLine width="100%" height={190} borderRadius={16} style={StyleSheet.absoluteFill} />
+      <Ionicons
+        name="camera-outline"
+        size={40}
+        color={colors.tertiaryLabel}
+        style={{ opacity: 0.2 }}
+      />
+      <SkeletonLine width={120} height={10} style={{ marginTop: 12 }} />
     </View>
   );
 }
@@ -41,17 +49,13 @@ const photoStyles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
-    overflow: "hidden",
-  },
-  iconFaded: {
-    opacity: 0.2,
   },
 });
 
 export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTabProps) {
   const colorScheme = useColorScheme();
   const colors = useThemeColors(colorScheme);
+  const router = useRouter();
 
   const resolvedPictures = pictures ?? profile.pictures;
   const showPhotos = resolvedPictures && resolvedPictures.length > 0;
@@ -63,16 +67,16 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
   const operator = profile.relationships.find(
     (r) => r.relationType.toLowerCase() === "operator"
   );
+  const manager = profile.relationships.find(
+    (r) => r.relationType.toLowerCase() === "manager"
+  );
   const displayOperator = operator && operator.companyName !== owner?.companyName ? operator : null;
+  const displayManager = manager && manager.companyName !== owner?.companyName && manager.companyName !== operator?.companyName ? manager : null;
 
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const fleet = profile.ownerIntelligence?.fleetAircraft ?? [];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: webTopPad + 12 }]}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.content}>
       {showPhotoSkeleton ? (
         <ScrollView
           horizontal
@@ -167,6 +171,19 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
                 <Text style={[styles.entityName, { color: colors.primaryLabel }]} numberOfLines={1}>
                   {owner.companyName}
                 </Text>
+                {owner.contactName ? (
+                  <Text style={[styles.entityContact, { color: colors.secondaryLabel }]} numberOfLines={1}>
+                    {owner.contactName}{owner.contactTitle ? ` · ${owner.contactTitle}` : ""}
+                  </Text>
+                ) : null}
+                {(owner.city || owner.state || owner.country) ? (
+                  <View style={styles.entityLocationRow}>
+                    <Ionicons name="location-outline" size={11} color={colors.tertiaryLabel} />
+                    <Text style={[styles.entityLocationText, { color: colors.tertiaryLabel }]}>
+                      {[owner.city, owner.state, owner.country].filter(Boolean).join(", ")}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           ) : null}
@@ -180,6 +197,25 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
                 <Text style={[styles.entityRole, { color: colors.tertiaryLabel }]}>Operator</Text>
                 <Text style={[styles.entityName, { color: colors.primaryLabel }]} numberOfLines={1}>
                   {displayOperator.companyName}
+                </Text>
+                {displayOperator.contactName ? (
+                  <Text style={[styles.entityContact, { color: colors.secondaryLabel }]} numberOfLines={1}>
+                    {displayOperator.contactName}{displayOperator.contactTitle ? ` · ${displayOperator.contactTitle}` : ""}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
+          {displayManager ? (
+            <View style={[styles.entityRow, styles.entityDivided, { borderTopColor: colors.separator }]}>
+              <View style={[styles.entityBadge, { backgroundColor: colors.systemOrange + "18" }]}>
+                <Ionicons name="business-outline" size={16} color={colors.systemOrange} />
+              </View>
+              <View style={styles.entityInfo}>
+                <Text style={[styles.entityRole, { color: colors.tertiaryLabel }]}>Manager</Text>
+                <Text style={[styles.entityName, { color: colors.primaryLabel }]} numberOfLines={1}>
+                  {displayManager.companyName}
                 </Text>
               </View>
             </View>
@@ -215,8 +251,42 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
         </View>
       </ContentReveal>
 
-      {profile.evolutionLink ? (
+      {profile.companyProfile ? (
         <ContentReveal visible={true} delay={180}>
+          <CompanyCard company={profile.companyProfile} />
+        </ContentReveal>
+      ) : null}
+
+      {fleet.length > 0 ? (
+        <ContentReveal visible={true} delay={240}>
+          <View style={styles.fleetSection}>
+            <Text style={[styles.fleetTitle, { color: colors.secondaryLabel }]}>
+              Fleet ({fleet.length} aircraft)
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.fleetListContent}
+            >
+              {fleet.map((item) => (
+                <View key={item.aircraftId} style={styles.fleetCard}>
+                  <FleetItem
+                    aircraft={item}
+                    onPress={() =>
+                      router.push(
+                        `/aircraft/${encodeURIComponent(item.registration)}`
+                      )
+                    }
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </ContentReveal>
+      ) : null}
+
+      {profile.evolutionLink ? (
+        <ContentReveal visible={true} delay={fleet.length > 0 ? 300 : 240}>
           <TouchableOpacity
             style={[styles.evolutionButton, { backgroundColor: colors.secondaryBackground }]}
             onPress={() => Linking.openURL(profile.evolutionLink)}
@@ -230,17 +300,15 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
           </TouchableOpacity>
         </ContentReveal>
       ) : null}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingTop: 12,
+    paddingBottom: 20,
   },
   gallery: {
     marginHorizontal: -16,
@@ -307,7 +375,7 @@ const styles = StyleSheet.create({
   },
   entityRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
   },
   entityDivided: {
@@ -321,6 +389,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 2,
   },
   entityInfo: {
     flex: 1,
@@ -335,6 +404,19 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "500" as const,
     marginTop: 1,
+  },
+  entityContact: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  entityLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 3,
+  },
+  entityLocationText: {
+    fontSize: 12,
   },
   metaStrip: {
     flexDirection: "row",
@@ -361,6 +443,22 @@ const styles = StyleSheet.create({
   forSaleText: {
     fontSize: 11,
     fontWeight: "600" as const,
+  },
+  fleetSection: {
+    marginBottom: 12,
+  },
+  fleetTitle: {
+    fontSize: 12,
+    fontWeight: "500" as const,
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
+    marginBottom: 10,
+  },
+  fleetListContent: {
+    gap: 8,
+  },
+  fleetCard: {
+    width: 220,
   },
   evolutionButton: {
     flexDirection: "row",

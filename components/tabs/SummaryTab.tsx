@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Animated,
   Linking,
   Platform,
@@ -581,11 +580,7 @@ export function SummaryTab({
 
   if (state === "pre-generation") {
     return (
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.scrollContent}>
         <View
           style={[
             styles.ctaCard,
@@ -650,17 +645,13 @@ export function SummaryTab({
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     );
   }
 
   if (state === "generating") {
     return (
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.scrollContent}>
         <View
           style={[
             styles.generatingCard,
@@ -686,7 +677,7 @@ export function SummaryTab({
           </View>
           <SkeletonCard lines={4} style={{ marginTop: 16 }} />
         </View>
-      </ScrollView>
+      </View>
     );
   }
 
@@ -699,11 +690,7 @@ export function SummaryTab({
   const financeResponse = isFinance ? (intelResponse as FinanceResponse) : null;
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.scrollContent}>
       <ContentReveal visible={true} delay={0}>
         <View
           style={[
@@ -946,7 +933,7 @@ export function SummaryTab({
       ) : null}
 
       <View style={{ height: 40 }} />
-    </ScrollView>
+    </View>
   );
 }
 
