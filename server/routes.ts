@@ -197,7 +197,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const rawKeys = typeof flightRaw === "object" && flightRaw ? Object.keys(flightRaw) : [];
         const firstArrayKey = rawKeys.find((k) => Array.isArray((flightRaw as any)[k]));
         const rawArrayLen = firstArrayKey ? (flightRaw as any)[firstArrayKey]?.length : (Array.isArray(flightRaw) ? (flightRaw as any[]).length : 0);
-        console.log(`[flight-debug] REG=${req.params.registration} ACID=${profile.aircraftId} rawType=${typeof flightRaw} rawKeys=[${rawKeys.join(",")}] firstArrayKey=${firstArrayKey} rawArrayLen=${rawArrayLen}`);
         if (rawArrayLen > 0 && firstArrayKey) {
           console.log(`[flight-debug] sample:`, JSON.stringify((flightRaw as any)[firstArrayKey]?.slice(0, 2)).substring(0, 500));
         }
