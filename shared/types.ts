@@ -107,12 +107,80 @@ export interface CompanyProfile {
 }
 
 export interface Contact {
+  contactId?: number | null;
   contactName: string;
   title: string | null;
   email: string | null;
   phone: string | null;
   mobilePhone: string | null;
   roleSignal: "Decision Maker" | "Influencer" | "Operational";
+  companyName?: string | null;
+  relationshipType?: string | null;
+  roleBadge?: string | null;
+}
+
+export type BrokerTier = "Primary" | "Aviation Ops" | "Finance/Admin" | "Secondary" | "Historical";
+
+export interface BrokerContact {
+  contactId: number | null;
+  companyId: number | null;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  companyName: string;
+  relationshipType: string;
+  emails: string[];
+  phones: {
+    mobile: string | null;
+    work: string | null;
+  };
+  tier: BrokerTier;
+  score: number;
+  reasons: string[];
+  preferredChannels: ("email" | "sms" | "call")[];
+  roleBadge: string;
+  regNbr?: string;
+  model?: string;
+}
+
+export interface CompanyNode {
+  companyId: number;
+  companyName: string;
+  role: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+}
+
+export interface ContactNode {
+  contactId: number | null;
+  firstName: string;
+  lastName: string;
+  title: string | null;
+  email: string | null;
+  phoneMobile: string | null;
+  phoneOffice: string | null;
+}
+
+export interface RelationshipEdge {
+  acid: number;
+  companyId: number | null;
+  contactId: number | null;
+  relationshipType: string;
+}
+
+export interface RelationshipGraph {
+  companies: CompanyNode[];
+  contacts: ContactNode[];
+  edges: RelationshipEdge[];
+}
+
+export interface IntelResponse {
+  regNbr: string;
+  acid: number;
+  relationships: RelationshipGraph;
+  recommendations: BrokerContact[];
+  cachedAt: string | null;
 }
 
 export interface ModelTrendSignals {

@@ -45,6 +45,10 @@ function RootLayoutNav() {
         options={{ title: "AI Summary", presentation: "modal" }}
       />
       <Stack.Screen
+        name="contacts/[registration]"
+        options={{ title: "All Contacts" }}
+      />
+      <Stack.Screen
         name="settings"
         options={{ title: "Settings", presentation: "modal" }}
       />

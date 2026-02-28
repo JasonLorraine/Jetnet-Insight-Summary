@@ -15,10 +15,11 @@ Aircraft sales intelligence mobile app built with React Native (Expo) and Expres
 3. **Owner Disposition Intelligence**: Sell probability (0-100) with archetype classification, brand loyalty, replacement cycle, fleet analysis, and contact accessibility scoring
 4. **Ownership Surface**: Company profile (type, HQ, industry), key contacts with role signals (Decision Maker / Influencer / Operational), horizontal fleet strip with deep navigation, Evolution company links
 5. **Aircraft Specs**: Full technical specifications via `getAircraft` endpoint — powerplant (engine model/count/program/APU), performance (range/speed/MTOW/fuel), cabin (seats/config/Wi-Fi/refurb), airframe (total time/landings/paint), avionics (suite/operation type); displayed in collapsible grouped layout
-6. **Contact Actions**: Tap-to-call, tap-to-text, tap-to-email on contact rows; uses native `tel:`, `sms:`, `mailto:` schemes with `Linking.canOpenURL` guards; pre-fills email subject and SMS body with aircraft registration
-7. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; two summary modes: (a) Insight Summary — ownership, market, transactions; (b) Flight Intelligence — 12-month behavioral analysis with flight analyzer metrics (trend slope, charter detection, pre-sale signals, downtime, route repetition, base airport, international ratio). Flight data pipeline: multi-page fetching (up to 5 pages), flexible JETNET response key detection (tries 10+ key variants + fallback to first array property), partial record tolerance (unparseable dates get fallback, missing airports still counted), graceful "no usable flights" 200 response with fallback to standard summary (no 404)
-8. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
-9. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
+6. **Broker Contact Intelligence**: Relationships-first enrichment via `getRelationships` → normalized graph → broker ranking engine (0-100 score) → tiered contacts (Primary / Aviation Ops / Finance-Admin / Secondary / Historical). Role badges (Owner Rep, Operator, Management, DOM, Chief Pilot, Scheduler, Controller/CFO). Dedup by contactId across companies/roles. Contact actions: tap-to-call, tap-to-text, tap-to-email, add-to-contacts. Prefilled outreach templates. "Copy Contact Pack" for CRM paste. 24h in-memory caching by ACID.
+7. **All Contacts Screen**: FlatList of all ranked broker contacts with filter chips (Primary, Aviation Ops, Finance/Admin, Secondary), search by name/company/title, sorted by score desc.
+8. **AI Broker Summaries**: BYO OpenAI or Anthropic API key, stored securely on-device; two summary modes: (a) Insight Summary — ownership, market, transactions; (b) Flight Intelligence — 12-month behavioral analysis with flight analyzer metrics (trend slope, charter detection, pre-sale signals, downtime, route repetition, base airport, international ratio). Flight data pipeline: multi-page fetching (up to 5 pages), flexible JETNET response key detection (tries 10+ key variants + fallback to first array property), partial record tolerance (unparseable dates get fallback, missing airports still counted), graceful "no usable flights" 200 response with fallback to standard summary (no 404)
+9. **Evolution Deep Links**: Direct links to JETNET Evolution for each aircraft and company
+10. **MCP Server**: Streamable HTTP transport at `/mcp` with 5 tools and 3 prompts for Siri/AI assistant integration
 
 ## Project Structure
 
@@ -31,6 +32,7 @@ app/                          # Expo Router screens
   search.tsx                  # Main search screen (after auth)
   settings.tsx                # Settings modal
   aircraft/[registration].tsx # Aircraft profile detail
+  contacts/[registration].tsx # All Contacts screen (filtered, searchable)
   summary/[registration].tsx  # AI summary generation
 
 components/                   # Reusable UI components
@@ -39,7 +41,7 @@ components/                   # Reusable UI components
   FactorBar.tsx               # Horizontal bar for scoring factors
   OwnerCard.tsx               # Owner intelligence panel
   CompanyCard.tsx             # Operating entity card (company profile + Evolution link)
-  ContactRow.tsx              # Contact row with role signal badge
+  ContactRow.tsx              # ContactRow (legacy) + BrokerContactRow (ranked, with role badges + actions)
   FleetItem.tsx               # Fleet list row item (supports horizontal scroll)
   SpecsSection.tsx            # Aircraft specs display (collapsible groups)
   SkeletonLoader.tsx          # Loading skeleton shimmer
@@ -53,19 +55,21 @@ constants/
   colors.ts                   # Dark aviation theme with score colors
 
 shared/
-  types.ts                    # TypeScript interfaces shared between client and server
+  types.ts                    # TypeScript interfaces shared between client and server (includes BrokerContact, RelationshipGraph, IntelResponse, etc.)
 
 lib/
   query-client.ts             # React Query client with auth headers + automatic 401 re-login
 
 server/
   index.ts                    # Express app setup, CORS, body parsing, logging
-  routes.ts                   # API route registration + MCP mount
+  routes.ts                   # API route registration + MCP mount + relationships intel route
   jetnet/
     session.ts                # JETNET session management (login, refresh, request)
     api.ts                    # JETNET API wrapper functions
   services/
     profileBuilder.ts         # Orchestrates Golden Path parallel fetch
+    relationshipsService.ts   # Normalizes raw getRelationships into RelationshipGraph (dedup companies/contacts/edges)
+    brokerContactRanker.ts    # Scores & ranks contacts (0-100), assigns tiers, role badges, preferred channels
     scoring.ts                # Hot/Not scoring engine (9 factors, normalized weights)
     modelTrends.ts            # Model market trends fetcher (24hr cached)
     disposition.ts            # Owner disposition intelligence
@@ -82,7 +86,7 @@ server/
 Section order follows human-question headers (Apple-style):
 1. **AircraftCard** — Hero (registration, make/model, Hot/Not pill)
 2. **"Will it sell?"** — Hot/Not Score + scoring factors
-3. **"Who owns this?"** — Owner/operator names (large, prominent), CompanyCard, fleet strip, key contacts
+3. **"Who owns this?"** — Owner/operator names (large, prominent), CompanyCard, fleet strip, Top Contacts (ranked by broker score, with role badges + actions), View All Contacts link, Copy Contact Pack
 4. **"What is it?"** — SpecsSection (powerplant, performance, cabin, airframe, avionics)
 5. **"Is it active?"** — Market signals + utilization combined
 6. **"What's the market?"** — Model trends / market momentum
@@ -95,10 +99,23 @@ Section order follows human-question headers (Apple-style):
 - `POST /api/auth/logout` — Session cleanup
 - `GET /api/auth/health` — Session health check
 - `GET /api/aircraft/:registration/profile` — Full aircraft profile with scoring
+- `GET /api/intel/relationships/:regNbr` — Relationship graph + ranked broker contacts (24h cached, `?refresh=true` to bust)
 - `POST /api/aircraft/:registration/ai-summary` — AI insight summary generation
 - `POST /api/aircraft/:registration/flight-summary` — AI flight intelligence summary
 - `POST /mcp` — MCP server (Streamable HTTP)
 - `GET /mcp` — MCP server info
+
+## Broker Contact Scoring
+
+Contacts from `getRelationships` are scored 0-100:
+- +30 for Owner/Operator/Manager relationship type
+- +15 for aviation ops titles (Chief Pilot, Director of Aviation, DOM, Scheduler)
+- +15 for finance titles (CFO, Controller, Finance)
+- +20 if email available
+- +10 if mobile phone available
+- +10 if direct aircraft relationship edge
+
+Tiers: Primary (>=40 + Owner/Operator/Manager), Aviation Ops (title match), Finance/Admin (title match), Secondary (score >= 20), Historical (remainder).
 
 ## Environment Variables
 
@@ -108,4 +125,4 @@ Section order follows human-question headers (Apple-style):
 
 ## Dependencies
 
-Key packages: expo-secure-store, @tanstack/react-query, @expo/vector-icons, expo-haptics, @modelcontextprotocol/sdk, openai, @anthropic-ai/sdk, express-rate-limit
+Key packages: expo-secure-store, expo-clipboard, @tanstack/react-query, @expo/vector-icons, expo-haptics, @modelcontextprotocol/sdk, openai, @anthropic-ai/sdk, express-rate-limit

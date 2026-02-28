@@ -5,14 +5,24 @@ import { buildAircraftProfile } from "./services/profileBuilder";
 import { generateAISummary } from "./services/aiSummary";
 import { generateFlightSummary } from "./services/flightSummary";
 import { normalizeFlights, analyzeFlights } from "./services/flightAnalyzer";
-import { getFlightDataPaged } from "./jetnet/api";
+import { normalizeRelationships } from "./services/relationshipsService";
+import { rankContacts } from "./services/brokerContactRanker";
+import { getFlightDataPaged, lookupByRegistration, getRelationships } from "./jetnet/api";
 import { mountMcpServer } from "./mcp/server";
 import { randomUUID } from "crypto";
+import type { IntelResponse } from "../shared/types";
 
 const sessions = new Map<
   string,
   { jetnetSession: SessionState; expiresAt: Date }
 >();
+
+const relationshipsCache = new Map<
+  string,
+  { data: IntelResponse; expiresAt: number }
+>();
+
+const RELATIONSHIPS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function getSession(req: Request): SessionState | null {
   const token =
@@ -230,6 +240,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const status = err instanceof JetnetError ? 502 : 500;
         return res.status(status).json({
           message: err.message || "Failed to generate flight summary.",
+          source: err instanceof JetnetError ? "jetnet" : "internal",
+        });
+      }
+    }
+  );
+
+  app.get(
+    "/api/intel/relationships/:regNbr",
+    async (req: Request, res: Response) => {
+      try {
+        const session = getSession(req);
+        if (!session) {
+          return res.status(401).json({ message: "Not authenticated." });
+        }
+
+        const fresh = await ensureSession(session);
+        const token = req.headers.authorization?.replace("Bearer ", "") || "";
+        const entry = sessions.get(token);
+        if (entry) entry.jetnetSession = fresh;
+
+        const regNbr = req.params.regNbr;
+        const forceRefresh = req.query.refresh === "true";
+
+        const regData = await lookupByRegistration(regNbr, fresh);
+        const ac = (regData as any).aircraftresult || regData;
+        const acid: number = ac.aircraftid || ac.aircraftId;
+        if (!acid) {
+          return res.json({
+            regNbr,
+            acid: 0,
+            relationships: { companies: [], contacts: [], edges: [] },
+            recommendations: [],
+            cachedAt: null,
+          } as IntelResponse);
+        }
+
+        const cacheKey = `relationships:${acid}`;
+        if (!forceRefresh) {
+          const cached = relationshipsCache.get(cacheKey);
+          if (cached && Date.now() < cached.expiresAt) {
+            return res.json(cached.data);
+          }
+        }
+
+        const rawRelationships = await getRelationships(acid, fresh);
+        const graph = normalizeRelationships(rawRelationships);
+        const recommendations = rankContacts(graph);
+
+        const model = ac.model || ac.modelname || "";
+        for (const rec of recommendations) {
+          rec.regNbr = regNbr;
+          rec.model = model;
+        }
+
+        const response: IntelResponse = {
+          regNbr,
+          acid,
+          relationships: graph,
+          recommendations,
+          cachedAt: new Date().toISOString(),
+        };
+
+        relationshipsCache.set(cacheKey, {
+          data: response,
+          expiresAt: Date.now() + RELATIONSHIPS_CACHE_TTL_MS,
+        });
+
+        return res.json(response);
+      } catch (err: any) {
+        const status = err instanceof JetnetError ? 502 : 500;
+        return res.status(status).json({
+          message: err.message || "Failed to fetch relationships.",
           source: err instanceof JetnetError ? "jetnet" : "internal",
         });
       }

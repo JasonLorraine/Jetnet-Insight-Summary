@@ -24,11 +24,12 @@ import { ScoreGauge } from "@/components/ScoreGauge";
 import { FactorBar } from "@/components/FactorBar";
 import { OwnerCard } from "@/components/OwnerCard";
 import { CompanyCard } from "@/components/CompanyCard";
-import { ContactRow } from "@/components/ContactRow";
+import { ContactRow, BrokerContactRow } from "@/components/ContactRow";
 import { FleetItem } from "@/components/FleetItem";
 import { SpecsSection } from "@/components/SpecsSection";
 import { ProfileSkeleton } from "@/components/SkeletonLoader";
-import type { AircraftProfile, ModelTrendSignals, Relationship } from "@/shared/types";
+import * as Clipboard from "expo-clipboard";
+import type { AircraftProfile, ModelTrendSignals, Relationship, IntelResponse, BrokerContact } from "@/shared/types";
 
 export default function AircraftProfileScreen() {
   const { registration } = useLocalSearchParams<{ registration: string }>();
@@ -50,6 +51,14 @@ export default function AircraftProfileScreen() {
   } = useQuery<AircraftProfile>({
     queryKey: ["/api/aircraft", registration, "profile"],
     enabled: !!registration,
+  });
+
+  const {
+    data: intelData,
+    isLoading: intelLoading,
+  } = useQuery<IntelResponse>({
+    queryKey: ["/api/intel/relationships", registration],
+    enabled: !!registration && !!profile,
   });
 
   React.useEffect(() => {
@@ -225,7 +234,58 @@ export default function AircraftProfileScreen() {
             </View>
           ) : null}
 
-          {profile.contacts.length > 0 ? (
+          {intelData && intelData.recommendations.length > 0 ? (
+            <View style={styles.contactsSection}>
+              <Text style={[styles.subSectionTitle, { color: colors.textSecondary }]}>
+                Top Contacts ({intelData.recommendations.length})
+              </Text>
+              {intelData.recommendations.slice(0, 5).map((rec, i) => (
+                <BrokerContactRow
+                  key={rec.contactId ?? i}
+                  contact={rec}
+                  aircraftRegistration={profile.registration}
+                />
+              ))}
+              <View style={styles.contactActions}>
+                {intelData.recommendations.length > 5 ? (
+                  <TouchableOpacity
+                    style={[styles.contactActionButton, { backgroundColor: colors.surfaceSecondary }]}
+                    onPress={() => {
+                      if (Platform.OS !== "web") {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }
+                      router.push(`/contacts/${encodeURIComponent(registration!)}`);
+                    }}
+                  >
+                    <Ionicons name="people" size={16} color={colors.tint} />
+                    <Text style={[styles.contactActionLabel, { color: colors.tint }]}>
+                      View All Contacts
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={[styles.contactActionButton, { backgroundColor: colors.surfaceSecondary }]}
+                  onPress={async () => {
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                    const pack = buildContactPack(profile, intelData.recommendations);
+                    try {
+                      await Clipboard.setStringAsync(pack);
+                      Alert.alert("Copied", "Contact pack copied to clipboard.");
+                    } catch {
+                      Alert.alert("Contact Pack", pack);
+                    }
+                  }}
+                >
+                  <Ionicons name="copy" size={16} color={colors.tint} />
+                  <Text style={[styles.contactActionLabel, { color: colors.tint }]}>
+                    Copy Contact Pack
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : profile.contacts.length > 0 ? (
             <View style={styles.contactsSection}>
               <Text style={[styles.subSectionTitle, { color: colors.textSecondary }]}>
                 Key Contacts ({profile.contacts.length})
@@ -334,6 +394,41 @@ export default function AircraftProfileScreen() {
       )}
     </ScrollView>
   );
+}
+
+function buildContactPack(
+  profile: AircraftProfile,
+  recommendations: BrokerContact[]
+): string {
+  const lines: string[] = [];
+  lines.push(`Aircraft: ${profile.registration} — ${profile.make} ${profile.model} (${profile.yearMfr})`);
+  lines.push("");
+
+  const owner = profile.relationships.find(r => r.relationType.toLowerCase() === "owner");
+  const operator = profile.relationships.find(r => r.relationType.toLowerCase() === "operator");
+  const manager = profile.relationships.find(r => r.relationType.toLowerCase() === "manager");
+  if (owner) lines.push(`Owner: ${owner.companyName}`);
+  if (operator && operator.companyName !== owner?.companyName) lines.push(`Operator: ${operator.companyName}`);
+  if (manager && manager.companyName !== owner?.companyName) lines.push(`Manager: ${manager.companyName}`);
+
+  const topContacts = recommendations.slice(0, 5);
+  if (topContacts.length > 0) {
+    lines.push("");
+    lines.push("Top Contacts:");
+    for (const c of topContacts) {
+      const name = `${c.firstName} ${c.lastName}`.trim();
+      const parts = [name];
+      if (c.roleBadge) parts.push(`[${c.roleBadge}]`);
+      if (c.companyName) parts.push(`— ${c.companyName}`);
+      lines.push(`  ${parts.join(" ")}`);
+      if (c.title) lines.push(`    ${c.title}`);
+      if (c.emails.length > 0) lines.push(`    ${c.emails[0]}`);
+      if (c.phones.mobile) lines.push(`    Mobile: ${c.phones.mobile}`);
+      else if (c.phones.work) lines.push(`    Work: ${c.phones.work}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function cleanPhone(raw: string): string {
@@ -780,6 +875,24 @@ const styles = StyleSheet.create({
   },
   contactsSection: {
     marginTop: 4,
+  },
+  contactActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  contactActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  contactActionLabel: {
+    fontSize: 13,
+    fontWeight: "600" as const,
   },
   aiButton: {
     flexDirection: "row",
