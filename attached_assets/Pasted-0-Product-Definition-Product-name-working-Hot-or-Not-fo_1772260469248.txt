@@ -1,0 +1,560 @@
+0) Product Definition
+
+Product name (working): Hot or Not for Jets (Mobile + Hosted MCP)
+
+MVP user value:
+
+Broker/dealer enters a tail number
+
+App returns a decision-ready aircraft one-pager
+
+App generates an AI summary (sales/broker voice) using the user’s own OpenAI/Anthropic key
+
+App produces a deterministic Hot/Not (Time-to-Sell) score with explainable factors
+
+Platform scope:
+
+iOS + Android app (Apple-like design)
+
+Hosted backend that exposes:
+
+REST endpoints for mobile
+
+An MCP server (streamable HTTP) with tools + prompts so any agent client can use it
+
+1) High-Level Architecture
+Components
+
+Mobile App
+
+SwiftUI (iOS) + Kotlin/Compose (Android) or React Native (single codebase)
+
+Only talks to your backend (never directly to JETNET)
+
+Stores:
+
+JETNET email/password (optional, see auth model below)
+
+BYO LLM key (encrypted at rest)
+
+user preferences
+
+Backend API
+
+Node/TypeScript recommended for production (Fastify or Express)
+
+Uses the repo’s existing session helper semantics (token refresh at ~50 min, probe via /getAccountInfo)
+
+Orchestrates “Golden Path” data fetch for a tail number
+
+Normalizes raw JETNET responses into stable UI contracts
+
+Hosted MCP Server
+
+Exposes tools:
+
+hot_or_not_by_registration
+
+jet_profile_by_registration
+
+ai_summary_by_registration
+
+(and your existing Golden Path tools pattern)
+
+Transport: Streamable HTTP endpoint /mcp
+
+2) Data Workflow (Tail Lookup Golden Path)
+
+Use the ordering already documented in your Hub.
+
+Required sequence (MVP)
+
+Step 1: Tail lookup
+
+GET /api/Aircraft/getRegNumber/{reg}/{apiToken}
+
+Output: aircraftid (primary join key)
+
+Step 2: Parallel enrichment (fast path)
+
+Pictures
+
+Relationships (owner, operator, manager, trustee)
+
+Flight activity (date range, paged)
+
+Step 3: Lazy loads (on demand tabs)
+
+History list (transactions)
+
+Event list (events)
+
+This matches your repo’s “Golden Path” rationale: aircraftid is required for joins; parallelize Step 2; keep heavy items lazy.
+
+3) Authentication Model (Mobile → Backend → JETNET)
+JETNET auth facts (must follow)
+
+Login is POST /api/Admin/APILogin with field name emailAddress (capital A)
+
+Returns two tokens:
+
+bearerToken used in Authorization: Bearer …
+
+apiToken used in the URL path
+
+Tokens expire ~60 minutes; validate via /api/Admin/getAccountInfo/{apiToken}
+
+“HTTP 200 does not mean success”: always check responsestatus
+
+Backend session handling
+
+Implement exactly the session pattern in src/jetnet/session.ts (or port it 1:1):
+
+login(email, password) returns bearer + apiToken
+
+ensureSession(session):
+
+if token older than ~50 minutes, relog
+
+else probe /getAccountInfo
+
+on failure relog once
+
+jetnetRequest():
+
+substitutes {apiToken} into path
+
+retries once on INVALID token response
+
+What the mobile app stores
+
+Recommended: store the user’s JETNET email/password locally encrypted and send to backend only at login-time over TLS.
+
+Backend stores a short-lived app session token (JWT) and keeps JETNET tokens server-side in Redis keyed to that app session.
+
+Never store JETNET password in backend DB (only in memory/redis TTL), unless you explicitly want “remember me” on server.
+
+4) Public Backend API Contract (for Mobile)
+
+Base: https://api.yourdomain.com/v1
+
+4.1 Auth
+
+POST /auth/login
+
+body: { jetnetEmail, jetnetPassword }
+
+returns: { appSessionToken, userId, expiresAt }
+
+POST /auth/logout
+
+invalidates Redis session and purges cached JETNET session
+
+GET /auth/health
+
+calls JETNET /getAccountInfo probe through cached session
+
+4.2 Tail lookup (profile)
+
+GET /aircraft/{registration}/profile
+
+query: flightStart=MM/DD/YYYY&flightEnd=MM/DD/YYYY
+
+returns normalized AircraftProfile (see Section 5)
+
+4.3 AI summary (BYO key)
+
+POST /aircraft/{registration}/ai-summary
+
+headers:
+
+X-LLM-Provider: openai | anthropic
+
+X-LLM-Key: <user key>
+
+body: { profile: AircraftProfile, summaryStyle: "broker", maxTokens?: number }
+
+returns: { summaryMarkdown, keyInsights: string[], redFlags: string[], suggestedNextQuestions: string[] }
+
+Rules:
+
+Do not log keys.
+
+Do not persist keys.
+
+Redact keys from error traces.
+
+4.4 Hot/Not score (deterministic)
+
+POST /aircraft/{registration}/hot-or-not
+
+body: { profile: AircraftProfile, marketContext?: MarketContext }
+
+returns:
+
+{
+  "score": 0-100,
+  "label": "HOT" | "WARM" | "NEUTRAL" | "COLD",
+  "timeToSellEstimateDays": 0-999,
+  "factors": [
+    { "name": "MarketLiquidity", "weight": 0.25, "value": 0.78, "explanation": "..." },
+    { "name": "DaysOnMarketSignal", "weight": 0.20, "value": 0.60, "explanation": "..." }
+  ],
+  "assumptions": ["..."],
+  "dataFreshness": { "jetnetTokenValidatedAt": "...", "lookupsCompletedAt": "..." }
+}
+4.5 Cache controls
+
+GET /aircraft/{registration}/profile
+
+backend caches per registration for N minutes (suggest 10–30 min) with ETag support
+
+invalidate if user explicitly refreshes
+
+5) Normalized Data Contracts (UI-Friendly)
+
+Create stable “cards” so the app and MCP tools do not depend on raw JETNET schema shifts.
+
+AircraftProfile (minimum)
+
+registration
+
+aircraftId
+
+make, model, series, yearMfr, serialNbr
+
+lifecycleStatus (in operation, for sale, etc if available)
+
+baseLocation (city/state/country if available)
+
+relationships[] (owner/operator/manager/trustee)
+
+pictures[] (urls)
+
+utilizationSummary (last 12 months flights, hours proxy if available)
+
+marketSignals
+
+forSaleFlag
+
+askingPrice (if available)
+
+daysOnMarket (if available)
+
+marketTrend (if available)
+
+history[] (transactions, last sale date, etc)
+
+events[] (if used)
+
+Your repo explicitly frames this as the workflow need: Aircraft → Company → Contact → Behavior → Signal → Action.
+
+6) Deterministic Hot/Not Scoring (Time-to-Sell)
+Goal
+
+Score should approximate: “How fast would this sell if it hit the market at a reasonable price?”
+
+Approach
+
+Two-layer system
+
+Deterministic score: 0–100, explainable, repeatable
+
+LLM narrative: explains the result in broker tone, but does not compute the score
+
+Inputs (ranked)
+
+Market liquidity for the model (trend line: for-sale count, avg days on market, avg ask movement)
+
+Current for-sale status and any days-on-market indicator
+
+Age vs typical market demand (year)
+
+Transaction recency (last sale, churn proxy)
+
+Utilization intensity (extremes can affect buyer pool)
+
+Ownership complexity (trustee layers, frequent changes)
+
+Completeness of listing data
+
+Scoring rubric (example weights)
+
+Model Liquidity (25%)
+
+derive from market trends tool or model-level trend endpoint you already expose in MCP
+
+Days on Market Signal (20%)
+
+if days-on-market exists, map shorter to higher score
+
+Age and Configuration Fit (15%)
+
+year vs current-year band for that model class
+
+Transaction Pattern (10%)
+
+frequent flips can be a flag, but also indicates liquidity
+
+Utilization Profile (10%)
+
+penalize extreme low (hangar queen) and extreme high (heavy use) depending on category
+
+Ownership Simplicity (10%)
+
+single-owner/operator is easier to transact than layered structures
+
+Data Completeness (10%)
+
+missing key fields reduces confidence
+
+Output mapping
+
+80–100: HOT
+
+60–79: WARM
+
+40–59: NEUTRAL
+
+0–39: COLD
+
+Time-to-sell estimate
+
+Start with model baseline (from market trend average DOM if you have it) then apply multipliers:
+
+HOT: baseline * 0.7–0.9
+
+WARM: baseline * 0.9–1.1
+
+NEUTRAL: baseline * 1.1–1.4
+
+COLD: baseline * 1.4–2.0
+
+If market trend DOM is not available in the API output for your first MVP, ship v1 with a conservative heuristic and clearly label “estimate”.
+
+7) AI Summary (BYO Key) Prompt Spec
+Design requirements
+
+Audience: aircraft sales, dealers, brokers
+
+Output should be:
+
+short executive summary
+
+bullets: “Why it will sell” + “Why it might stall” + “What I’d ask next”
+
+optional: recommended positioning (“price discipline”, “buyer profile”)
+
+Prompt template (server-owned)
+
+System:
+
+“You are an aircraft sales analyst. Write in concise broker tone. No fluff.”
+
+Developer:
+
+“Use only the provided JSON fields. If data is missing, say what is missing.”
+
+User:
+
+Provide the normalized AircraftProfile JSON
+
+Provider adapters
+
+OpenAI: responses or chat.completions depending on your standard
+
+Anthropic: messages API
+
+Important: keys are user-provided per request; you must not store them.
+
+8) MCP Server (Hosted) Design
+
+Your repo already includes an MCP server concept and tool list; extend it for Hot/Not + AI summary.
+
+Transport
+
+Implement MCP Streamable HTTP at /mcp
+
+Support:
+
+HTTP POST for JSON-RPC
+
+HTTP GET with Accept: text/event-stream for server-to-client events
+
+Tools to implement (minimum)
+
+jet_profile_by_registration(registration, flightStart?, flightEnd?)
+
+returns AircraftProfile
+
+hot_or_not_by_registration(registration, flightStart?, flightEnd?)
+
+returns score object (Section 4.4)
+
+ai_summary_by_registration(registration, provider, apiKey, style="broker")
+
+returns summary object (Section 4.3)
+
+note: for MCP clients, accept apiKey but mark it sensitive and never log
+
+jetnet_golden_path(registration)
+
+keep for parity with your existing narrative and examples
+
+Prompts to expose
+
+Expose MCP prompts that make the agent useful out of the box:
+
+“Broker one-pager”
+
+“Pre-buy diligence questions”
+
+“Listing positioning draft”
+
+“Hot/Not explanation”
+
+MCP supports tools and prompt concepts in the spec.
+
+Security
+
+Put the hosted MCP behind:
+
+OAuth or at minimum an API key for your service
+
+rate limits per client
+
+Do not expose JETNET creds in MCP server config. For production multi-user, you will have per-user JETNET sessions.
+
+9) Mobile UX Spec (Apple-like)
+Design principles
+
+Single primary action per screen
+
+Large typography, strong hierarchy
+
+Clean “cards” and generous spacing
+
+Subtle motion and haptics
+
+Skeleton loading for the “Golden Path” response
+
+Screens
+
+Welcome
+
+“Connect your JETNET account”
+
+JETNET Login
+
+email + password
+
+“Test Connection” (calls backend /auth/health)
+
+BYO AI Key
+
+Provider toggle (OpenAI / Anthropic)
+
+API key field (secure)
+
+Search
+
+One field: registration
+
+Recent searches list
+
+Aircraft One-Pager
+
+Header: Tail, make/model, year, serial
+
+“Hot/Not” pill + score
+
+Tabs:
+
+Overview
+
+Ownership
+
+Activity
+
+Market
+
+History (lazy)
+
+AI Summary
+
+“Generate summary” button
+
+Output in broker voice + bullets
+
+Performance targets
+
+Tail → One-pager: under 2.0s median (use parallel fetch and caching)
+
+AI summary: under 6.0s median (depends on provider)
+
+10) Engineering Tasks (Implementation Plan)
+Phase 1: Backend foundation
+
+Implement app auth session store (Redis)
+
+Integrate JETNET session helper behavior exactly as documented in repo:
+
+login via /APILogin
+
+validate via /getAccountInfo
+
+refresh at ~50 minutes
+
+never assume HTTP 200 means success
+
+Phase 2: Profile endpoint
+
+Implement the Golden Path orchestrator per repo sequencing
+
+Create normalization layer to AircraftProfile
+
+Add caching + ETags
+
+Phase 3: Hot/Not scoring
+
+Implement deterministic scoring engine
+
+Add unit tests with fixture JSON (store redacted examples in repo)
+
+Phase 4: AI summary
+
+Implement OpenAI + Anthropic adapters
+
+Prompt template + safety checks (no hallucinated fields)
+
+Phase 5: MCP server
+
+Stand up /mcp streamable HTTP endpoint
+
+Expose tools + prompts
+
+Add a “smoke test” client script
+
+Phase 6: Mobile app
+
+Implement screens, integrate backend endpoints
+
+Offline-friendly cached recent searches
+
+Polished Apple-like UI patterns and animations
+
+11) What I need from you (so engineering does not guess)
+
+You already answered the big ones. Two remaining “implementation blockers” to choose now:
+
+Default flight activity window for the utilization tab:
+
+6 months or 12 months?
+
+For market liquidity, which JETNET endpoint(s) in your tenant reliably return:
+
+average days on market
+
+for-sale count over time
+
+average ask over time

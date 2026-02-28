@@ -1,0 +1,235 @@
+Good question — because **MCP on a phone is not obvious until you think of it as “your aviation data becoming a native capability inside AI,” not just inside your app.**
+
+Let’s separate what MCP *actually* gives you versus what a normal mobile app already does.
+
+---
+
+# What MCP on your phone gives you
+
+## 1. Your app stops being just an app
+
+It becomes a **data capability any AI can use**.
+
+Without MCP:
+
+* User opens *Hot or Not*
+* Types tail number
+* Gets result
+* Leaves app
+
+With MCP:
+
+* The phone’s AI (Claude, GPT, future Apple Intelligence agents, etc.) can call:
+
+```
+hot_or_not_by_registration("N123AB")
+```
+
+directly.
+
+Meaning the workflow becomes:
+
+> “Hey Claude, is N123AB a good acquisition target?”
+
+…and your MCP server runs the JETNET workflow behind the scenes.
+
+Your product becomes **infrastructure**, not UI.
+
+---
+
+## 2. You move from “mobile app” → “aviation intelligence layer”
+
+Right now:
+
+* Users must remember to open your app.
+
+With MCP:
+
+* The AI opens *you* automatically when aviation context appears.
+
+Examples:
+
+### Example A — Broker texting a client
+
+User asks AI:
+
+> “Summarize this aircraft and tell me if it will sell quickly.”
+
+AI:
+
+1. Detects tail number
+2. Calls your MCP tool
+3. Returns Hot/Not + broker summary
+
+Your system becomes invisible but essential.
+
+---
+
+## 3. Cross-app intelligence (this is the real unlock)
+
+MCP allows AI to combine tools.
+
+Example on a phone:
+
+User:
+
+> “Compare N123AB with similar aircraft currently for sale and draft outreach.”
+
+AI workflow:
+
+1. Calls your MCP:
+
+   * aircraft profile
+   * market signals
+   * hot/not score
+2. Calls email/calendar tools
+3. Produces broker-ready outreach
+
+Your MCP becomes part of a **multi-tool reasoning chain**.
+
+Your competitors’ apps cannot do this.
+
+---
+
+## 4. Zero UI dependency (huge for adoption)
+
+Most brokers will never install another aviation app.
+
+But they WILL use:
+
+* Claude mobile
+* ChatGPT mobile
+* Apple Intelligence
+* future CRM copilots
+
+If MCP exists:
+👉 they already have your product.
+
+---
+
+## 5. Natural language replaces navigation
+
+Instead of:
+
+```
+Login → Search → Tabs → Analyze → Think
+```
+
+User says:
+
+> “Is this jet liquid in today’s market?”
+
+Your MCP tools provide:
+
+* structured data
+* scoring
+* summary
+
+AI handles interaction.
+
+You become the **data brain**, not the interface.
+
+---
+
+## 6. Your moat becomes stronger
+
+Anyone can build:
+
+* a tail lookup app
+* dashboards
+* reports
+
+Very few will build:
+
+* deterministic scoring
+* normalized aviation ontology
+* MCP tools trusted by agents
+
+Once agents rely on your tools, switching costs become massive.
+
+---
+
+# What MCP specifically enables on mobile (practical)
+
+### Today (near-term)
+
+* Claude mobile connects to your MCP server
+* User queries aviation naturally
+* Your backend executes JETNET workflows
+
+### Soon
+
+* AI reads tail numbers from:
+
+  * emails
+  * PDFs
+  * screenshots
+  * iMessages
+* Automatically calls your tools
+
+### Future (Apple direction)
+
+Apple Intelligence-style agents:
+
+* detect aviation context
+* call MCP tools silently
+* show results inline in iOS
+
+Your backend becomes a **system extension**.
+
+---
+
+# The mental model
+
+Your mobile app = **Dashboard**
+
+Your MCP server = **Operating System plugin for aviation intelligence**
+
+The dashboard attracts users.
+The MCP layer makes you unavoidable.
+
+---
+
+# Why this matters specifically for *you* (JETNET context)
+
+You already have:
+
+* Golden Path workflow
+* aircraft → company → behavior → signal → action model
+* deterministic aviation expertise
+
+MCP turns that into:
+
+> “Ask AI anything about a jet” → powered by JETNET logic.
+
+That is dramatically bigger than a mobile app.
+
+---
+
+# What MCP on the phone does NOT do
+
+Important expectations:
+
+❌ It does not replace your mobile UI
+❌ It does not store data locally
+❌ It does not eliminate backend work
+❌ It does not give you distribution automatically
+
+It gives you **AI interoperability**.
+
+---
+
+# The strategic insight (this is the big one)
+
+Your app is how humans discover you.
+
+Your MCP server is how AI depends on you.
+
+And long-term, AI will be the primary interface.
+
+---
+
+If you want, next I can show you something extremely practical:
+
+👉 **The exact moment a broker would feel “wow” using this on their phone**
+(a real 30-second workflow that sells the entire product instantly).
