@@ -8,22 +8,29 @@ import {
   useColorScheme,
   Platform,
   Linking,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import { useThemeColors, getScoreColor } from "@/constants/colors";
 import { SkeletonLine } from "@/components/skeletons/SkeletonLine";
+import { SkeletonCard } from "@/components/skeletons/SkeletonCard";
 import { ContentReveal } from "@/components/ContentReveal";
 import { CompanyCard } from "@/components/CompanyCard";
 import { FleetItem } from "@/components/FleetItem";
 import { PhotoGallery } from "@/components/PhotoGallery";
-import type { AircraftProfile, AircraftPicture } from "@/shared/types";
+import { BrokerContactRow, ContactRow } from "@/components/ContactRow";
+import type { AircraftProfile, AircraftPicture, IntelResponse, BrokerContact } from "@/shared/types";
 
 interface OverviewTabProps {
   profile: AircraftProfile;
   pictures: AircraftPicture[] | undefined;
   isPicturesLoading: boolean;
+  relationships: IntelResponse | null;
+  isRelationshipsLoading: boolean;
 }
 
 function PhotoSkeleton() {
@@ -53,7 +60,53 @@ const photoStyles = StyleSheet.create({
   },
 });
 
-export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTabProps) {
+function buildContactPack(
+  profile: AircraftProfile,
+  recommendations: BrokerContact[]
+): string {
+  const lines: string[] = [];
+  lines.push(
+    `${profile.registration} — ${profile.yearMfr} ${profile.make} ${profile.model}`
+  );
+  lines.push(`S/N ${profile.serialNumber}`);
+  lines.push("");
+
+  const owner = profile.relationships.find(
+    (r) => r.relationType.toLowerCase() === "owner"
+  );
+  const operator = profile.relationships.find(
+    (r) => r.relationType.toLowerCase() === "operator"
+  );
+  const manager = profile.relationships.find(
+    (r) => r.relationType.toLowerCase() === "manager"
+  );
+  if (owner) lines.push(`Owner: ${owner.companyName}`);
+  if (operator && operator.companyName !== owner?.companyName)
+    lines.push(`Operator: ${operator.companyName}`);
+  if (manager && manager.companyName !== owner?.companyName)
+    lines.push(`Manager: ${manager.companyName}`);
+
+  const topContacts = recommendations.slice(0, 5);
+  if (topContacts.length > 0) {
+    lines.push("");
+    lines.push("Top Contacts:");
+    for (const c of topContacts) {
+      const name = `${c.firstName} ${c.lastName}`.trim();
+      const parts = [name];
+      if (c.roleBadge) parts.push(`[${c.roleBadge}]`);
+      if (c.companyName) parts.push(`— ${c.companyName}`);
+      lines.push(`  ${parts.join(" ")}`);
+      if (c.title) lines.push(`    ${c.title}`);
+      if (c.emails.length > 0) lines.push(`    ${c.emails[0]}`);
+      if (c.phones.mobile) lines.push(`    Mobile: ${c.phones.mobile}`);
+      else if (c.phones.work) lines.push(`    Work: ${c.phones.work}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export function OverviewTab({ profile, pictures, isPicturesLoading, relationships, isRelationshipsLoading }: OverviewTabProps) {
   const colorScheme = useColorScheme();
   const colors = useThemeColors(colorScheme);
   const router = useRouter();
@@ -274,8 +327,24 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
         </View>
       </ContentReveal>
 
+      {isRelationshipsLoading && !relationships && (profile.contacts?.length ?? 0) === 0 ? (
+        <View style={styles.contactsSection}>
+          <Text style={[styles.contactsSectionTitle, { color: colors.tertiaryLabel }]}>
+            WHO'S INVOLVED
+          </Text>
+          <SkeletonCard lines={4} />
+        </View>
+      ) : (
+        <ContactsSectionBlock
+          relationships={relationships}
+          profile={profile}
+          colors={colors}
+          router={router}
+        />
+      )}
+
       {profile.companyProfile ? (
-        <ContentReveal visible={true} delay={180}>
+        <ContentReveal visible={true} delay={240}>
           <CompanyCard company={profile.companyProfile} />
         </ContentReveal>
       ) : null}
@@ -326,6 +395,186 @@ export function OverviewTab({ profile, pictures, isPicturesLoading }: OverviewTa
     </View>
   );
 }
+
+function ContactsSectionBlock({
+  relationships,
+  profile,
+  colors,
+  router,
+}: {
+  relationships: IntelResponse | null;
+  profile: AircraftProfile;
+  colors: ReturnType<typeof useThemeColors>;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const recs = relationships?.recommendations ?? [];
+  const hasRecs = recs.length > 0;
+  const hasProfileContacts = (profile.contacts?.length ?? 0) > 0;
+
+  if (!hasRecs && !hasProfileContacts) return null;
+
+  const tiers: Record<string, BrokerContact[]> = {};
+  for (const rec of recs) {
+    const tier = rec.tier || "Secondary";
+    if (!tiers[tier]) tiers[tier] = [];
+    tiers[tier].push(rec);
+  }
+
+  const tierOrder = [
+    "Primary",
+    "Aviation Ops",
+    "Finance/Admin",
+    "Secondary",
+    "Historical",
+  ];
+
+  async function handleCopyPack() {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    const pack = buildContactPack(profile, recs);
+    try {
+      await Clipboard.setStringAsync(pack);
+      Alert.alert("Copied", "Contact pack copied to clipboard.");
+    } catch {
+      Alert.alert("Contact Pack", pack);
+    }
+  }
+
+  return (
+    <ContentReveal visible={true} delay={180}>
+      <View style={contactStyles.container}>
+        <Text style={[contactStyles.sectionTitle, { color: colors.tertiaryLabel }]}>
+          WHO'S INVOLVED
+        </Text>
+
+        {hasRecs ? (
+          <>
+            {tierOrder.map((tier) => {
+              const contacts = tiers[tier];
+              if (!contacts || contacts.length === 0) return null;
+              return (
+                <View key={tier} style={contactStyles.tierGroup}>
+                  <Text
+                    style={[
+                      contactStyles.tierLabel,
+                      { color: colors.secondaryLabel },
+                    ]}
+                  >
+                    {tier}
+                  </Text>
+                  {contacts.map((rec, i) => (
+                    <BrokerContactRow
+                      key={rec.contactId ?? i}
+                      contact={rec}
+                      aircraftRegistration={profile.registration}
+                    />
+                  ))}
+                </View>
+              );
+            })}
+
+            <View style={contactStyles.contactActions}>
+              {recs.length > 5 ? (
+                <TouchableOpacity
+                  style={[
+                    contactStyles.contactActionButton,
+                    { backgroundColor: colors.tertiaryBackground },
+                  ]}
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                    router.push(
+                      `/contacts/${encodeURIComponent(profile.registration)}`
+                    );
+                  }}
+                >
+                  <Ionicons name="people" size={16} color={colors.systemBlue} />
+                  <Text
+                    style={[
+                      contactStyles.contactActionLabel,
+                      { color: colors.systemBlue },
+                    ]}
+                  >
+                    View All Contacts
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[
+                  contactStyles.contactActionButton,
+                  { backgroundColor: colors.tertiaryBackground },
+                ]}
+                onPress={handleCopyPack}
+              >
+                <Ionicons name="copy" size={16} color={colors.systemBlue} />
+                <Text
+                  style={[
+                    contactStyles.contactActionLabel,
+                    { color: colors.systemBlue },
+                  ]}
+                >
+                  Copy Contact Pack
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          profile.contacts.slice(0, 8).map((contact, i) => (
+            <ContactRow
+              key={i}
+              contact={contact}
+              aircraftRegistration={profile.registration}
+            />
+          ))
+        )}
+      </View>
+    </ContentReveal>
+  );
+}
+
+const contactStyles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
+    marginBottom: 8,
+  },
+  tierGroup: {
+    marginBottom: 8,
+  },
+  tierLabel: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    letterSpacing: 0.3,
+    textTransform: "uppercase" as const,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  contactActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  contactActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  contactActionLabel: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+  },
+});
 
 const styles = StyleSheet.create({
   content: {
@@ -513,5 +762,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500" as const,
     flex: 1,
+  },
+  contactsSection: {
+    marginBottom: 16,
+  },
+  contactsSectionTitle: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    letterSpacing: 0.5,
+    textTransform: "uppercase" as const,
+    marginBottom: 8,
   },
 });

@@ -193,18 +193,16 @@ export default function AircraftProfileScreen() {
               profile={profile}
               pictures={pictures}
               isPicturesLoading={phase2Status === "loading"}
+              relationships={relationships ?? null}
+              isRelationshipsLoading={phase3Status === "loading"}
             />
           )}
           {activeTab === 1 && (
             <SpecsIntelTab
               profile={profile}
               condensed={condensed}
-              relationships={relationships}
               personaId={personaId}
               isCondensedLoading={phase2Status === "loading"}
-              isRelationshipsLoading={
-                phase2Status === "loading" || phase3Status === "loading"
-              }
             />
           )}
           {activeTab === 2 && (

@@ -3,40 +3,26 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  Linking,
-  Platform,
   useColorScheme,
-  Alert,
   Animated,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
-import * as Clipboard from "expo-clipboard";
 import { useThemeColors, getPersonaAccent } from "@/constants/colors";
 import { ContentReveal } from "@/components/ContentReveal";
 import { SkeletonSection } from "@/components/skeletons/SkeletonSection";
-import { SkeletonCard } from "@/components/skeletons/SkeletonCard";
-import { BrokerContactRow, ContactRow } from "@/components/ContactRow";
 import type {
   CondensedAircraftProfile,
-  IntelResponse,
   AircraftProfile,
-  BrokerContact,
 } from "@/shared/types";
 import type { PersonaId } from "@/shared/types/persona";
 
 interface SpecsIntelTabProps {
   profile: AircraftProfile | undefined;
   condensed: CondensedAircraftProfile | undefined;
-  relationships: IntelResponse | undefined;
   personaId: PersonaId | null;
   isCondensedLoading: boolean;
-  isRelationshipsLoading: boolean;
 }
 
-type SectionKey = "specs" | "contacts" | "flights" | "market";
+type SectionKey = "specs" | "flights" | "market";
 
 const MARKET_VISIBLE_PERSONAS: PersonaId[] = [
   "dealer_broker",
@@ -46,18 +32,18 @@ const MARKET_VISIBLE_PERSONAS: PersonaId[] = [
 ];
 
 const PERSONA_SECTION_ORDER: Record<string, SectionKey[]> = {
-  dealer_broker: ["contacts", "specs", "market", "flights"],
-  fbo: ["specs", "flights", "contacts", "market"],
-  mro: ["specs", "flights", "contacts", "market"],
-  charter: ["flights", "specs", "contacts", "market"],
-  fleet_management: ["contacts", "flights", "specs", "market"],
-  finance: ["specs", "contacts", "market", "flights"],
-  catering: ["specs", "flights", "contacts", "market"],
-  ground_transportation: ["flights", "contacts", "specs", "market"],
-  detailing: ["specs", "flights", "contacts", "market"],
+  dealer_broker: ["specs", "market", "flights"],
+  fbo: ["specs", "flights", "market"],
+  mro: ["specs", "flights", "market"],
+  charter: ["flights", "specs", "market"],
+  fleet_management: ["flights", "specs", "market"],
+  finance: ["specs", "market", "flights"],
+  catering: ["specs", "flights", "market"],
+  ground_transportation: ["flights", "specs", "market"],
+  detailing: ["specs", "flights", "market"],
 };
 
-const DEFAULT_ORDER: SectionKey[] = ["specs", "contacts", "flights", "market"];
+const DEFAULT_ORDER: SectionKey[] = ["specs", "flights", "market"];
 
 function getSectionOrder(personaId: PersonaId | null): SectionKey[] {
   if (!personaId) return DEFAULT_ORDER;
@@ -291,138 +277,6 @@ function FallbackSpecsSection({
           );
         })}
       </View>
-    </View>
-  );
-}
-
-function ContactsSection({
-  relationships,
-  profile,
-  colors,
-}: {
-  relationships: IntelResponse;
-  profile: AircraftProfile;
-  colors: ReturnType<typeof useThemeColors>;
-}) {
-  const router = useRouter();
-  const recs = relationships.recommendations;
-  if (recs.length === 0 && profile.contacts.length === 0) return null;
-
-  const tiers: Record<string, BrokerContact[]> = {};
-  for (const rec of recs) {
-    const tier = rec.tier || "Secondary";
-    if (!tiers[tier]) tiers[tier] = [];
-    tiers[tier].push(rec);
-  }
-
-  const tierOrder = [
-    "Primary",
-    "Aviation Ops",
-    "Finance/Admin",
-    "Secondary",
-    "Historical",
-  ];
-
-  async function handleCopyPack() {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    const pack = buildContactPack(profile, recs);
-    try {
-      await Clipboard.setStringAsync(pack);
-      Alert.alert("Copied", "Contact pack copied to clipboard.");
-    } catch {
-      Alert.alert("Contact Pack", pack);
-    }
-  }
-
-  return (
-    <View style={sectionStyles.container}>
-      <Text style={[sectionStyles.sectionTitle, { color: colors.tertiaryLabel }]}>
-        WHO'S INVOLVED
-      </Text>
-
-      {recs.length > 0 ? (
-        <>
-          {tierOrder.map((tier) => {
-            const contacts = tiers[tier];
-            if (!contacts || contacts.length === 0) return null;
-            return (
-              <View key={tier} style={sectionStyles.tierGroup}>
-                <Text
-                  style={[
-                    sectionStyles.tierLabel,
-                    { color: colors.secondaryLabel },
-                  ]}
-                >
-                  {tier}
-                </Text>
-                {contacts.map((rec, i) => (
-                  <BrokerContactRow
-                    key={rec.contactId ?? i}
-                    contact={rec}
-                    aircraftRegistration={profile.registration}
-                  />
-                ))}
-              </View>
-            );
-          })}
-
-          <View style={sectionStyles.contactActions}>
-            {recs.length > 5 ? (
-              <TouchableOpacity
-                style={[
-                  sectionStyles.contactActionButton,
-                  { backgroundColor: colors.tertiaryBackground },
-                ]}
-                onPress={() => {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                  router.push(
-                    `/contacts/${encodeURIComponent(profile.registration)}`
-                  );
-                }}
-              >
-                <Ionicons name="people" size={16} color={colors.systemBlue} />
-                <Text
-                  style={[
-                    sectionStyles.contactActionLabel,
-                    { color: colors.systemBlue },
-                  ]}
-                >
-                  View All Contacts
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              style={[
-                sectionStyles.contactActionButton,
-                { backgroundColor: colors.tertiaryBackground },
-              ]}
-              onPress={handleCopyPack}
-            >
-              <Ionicons name="copy" size={16} color={colors.systemBlue} />
-              <Text
-                style={[
-                  sectionStyles.contactActionLabel,
-                  { color: colors.systemBlue },
-                ]}
-              >
-                Copy Contact Pack
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        profile.contacts.slice(0, 8).map((contact, i) => (
-          <ContactRow
-            key={i}
-            contact={contact}
-            aircraftRegistration={profile.registration}
-          />
-        ))
-      )}
     </View>
   );
 }
@@ -739,58 +593,11 @@ function MarketContextSection({
   );
 }
 
-function buildContactPack(
-  profile: AircraftProfile,
-  recommendations: BrokerContact[]
-): string {
-  const lines: string[] = [];
-  lines.push(
-    `Aircraft: ${profile.registration} — ${profile.make} ${profile.model} (${profile.yearMfr})`
-  );
-  lines.push("");
-
-  const owner = profile.relationships.find(
-    (r) => r.relationType.toLowerCase() === "owner"
-  );
-  const operator = profile.relationships.find(
-    (r) => r.relationType.toLowerCase() === "operator"
-  );
-  const manager = profile.relationships.find(
-    (r) => r.relationType.toLowerCase() === "manager"
-  );
-  if (owner) lines.push(`Owner: ${owner.companyName}`);
-  if (operator && operator.companyName !== owner?.companyName)
-    lines.push(`Operator: ${operator.companyName}`);
-  if (manager && manager.companyName !== owner?.companyName)
-    lines.push(`Manager: ${manager.companyName}`);
-
-  const topContacts = recommendations.slice(0, 5);
-  if (topContacts.length > 0) {
-    lines.push("");
-    lines.push("Top Contacts:");
-    for (const c of topContacts) {
-      const name = `${c.firstName} ${c.lastName}`.trim();
-      const parts = [name];
-      if (c.roleBadge) parts.push(`[${c.roleBadge}]`);
-      if (c.companyName) parts.push(`— ${c.companyName}`);
-      lines.push(`  ${parts.join(" ")}`);
-      if (c.title) lines.push(`    ${c.title}`);
-      if (c.emails.length > 0) lines.push(`    ${c.emails[0]}`);
-      if (c.phones.mobile) lines.push(`    Mobile: ${c.phones.mobile}`);
-      else if (c.phones.work) lines.push(`    Work: ${c.phones.work}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
 export function SpecsIntelTab({
   profile,
   condensed,
-  relationships,
   personaId,
   isCondensedLoading,
-  isRelationshipsLoading,
 }: SpecsIntelTabProps) {
   const colorScheme = useColorScheme();
   const colors = useThemeColors(colorScheme);
@@ -804,16 +611,12 @@ export function SpecsIntelTab({
   const profileSpecRows = profile ? getSpecRowsFromProfile(profile) : [];
   const hasProfileSpecs = hasAnySpecRowValue(profileSpecRows);
   const specsReady = !!condensed || hasProfileSpecs;
-  const contactsReady = !!relationships || (profile?.contacts?.length ?? 0) > 0;
   const flightsReady = !!profile?.utilizationSummary;
   const marketReady = !!condensed && showMarket;
 
   const hasSpecs = condensed
     ? hasAnySpecRowValue(profile ? getMergedSpecRows(condensed, profile) : getSpecRows(condensed))
     : hasProfileSpecs;
-  const hasContacts =
-    (relationships?.recommendations?.length ?? 0) > 0 ||
-    (profile?.contacts?.length ?? 0) > 0;
   const hasFlights = !!profile?.utilizationSummary;
   const hasMarket = condensed ? hasMarketData(condensed) && showMarket : false;
 
@@ -846,33 +649,6 @@ export function SpecsIntelTab({
         return (
           <ContentReveal key={key} visible={true} delay={delay}>
             <FallbackSpecsSection rows={profileSpecRows} colors={colors} />
-          </ContentReveal>
-        );
-
-      case "contacts":
-        if (!contactsReady) {
-          return isRelationshipsLoading ? (
-            <View key={key} style={sectionStyles.sectionMargin}>
-              <Text
-                style={[
-                  sectionStyles.sectionTitle,
-                  { color: colors.tertiaryLabel },
-                ]}
-              >
-                WHO'S INVOLVED
-              </Text>
-              <SkeletonCard lines={4} />
-            </View>
-          ) : null;
-        }
-        if (!hasContacts) return null;
-        return (
-          <ContentReveal key={key} visible={contactsReady} delay={delay}>
-            <ContactsSection
-              relationships={relationships!}
-              profile={profile!}
-              colors={colors}
-            />
           </ContentReveal>
         );
 
@@ -968,35 +744,6 @@ const sectionStyles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-  },
-  tierGroup: {
-    marginBottom: 8,
-  },
-  tierLabel: {
-    fontSize: 12,
-    fontWeight: "600" as const,
-    letterSpacing: 0.3,
-    textTransform: "uppercase" as const,
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  contactActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-    flexWrap: "wrap",
-  },
-  contactActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  contactActionLabel: {
-    fontSize: 13,
-    fontWeight: "600" as const,
   },
   flightStatsRow: {
     flexDirection: "row",

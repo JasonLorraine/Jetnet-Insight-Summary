@@ -1,0 +1,164 @@
+# Field Map — What it means, who it matters to, and why
+
+This expands the prior mapping by adding:
+
+* **Meaning** (plain English)
+* **Who it’s important to** (broker / operator / sales / CRM / compliance / maintenance / analyst)
+* **Why it matters** (decision impact)
+
+---
+
+## 1) Aircraft identity and basic summary
+
+| Field                       | Endpoint                                  | Meaning                                                 | Important to                     | Why it matters                                                            |
+| --------------------------- | ----------------------------------------- | ------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------- |
+| `aircraftid` (ACID)         | getRegNumber, getRelationships, condensed | Internal unique aircraft key                            | Engineering, CRM, analysts       | The join key that makes the rest of the workflow deterministic            |
+| `modelid`                   | getRegNumber, condensed                   | Internal model key                                      | Analysts, pricing, brokers       | Drives model trends, comps, valuation, and specs fan-out                  |
+| `regnbr`                    | all                                       | Tail number                                             | Everyone                         | Primary user input and lookup identifier                                  |
+| `make` / `model`            | getRegNumber, condensed                   | Aircraft make/model                                     | Brokers, ops, sales              | The “what is it” identifier for quick scanning and comps                  |
+| `maketype` / `airframetype` | getRegNumber, condensed                   | High-level classification (Piston/Jet; FixedWing/Rotor) | Product, analysts                | Used for filtering, UI grouping, and determining which modules apply      |
+| `icaotype` / `modelicao`    | getRegNumber, condensed                   | ICAO type code                                          | Ops, data teams                  | Standardized aircraft type; useful for integrations and external datasets |
+| `serialnbr`                 | getRegNumber, condensed                   | Manufacturer serial number                              | Maintenance, compliance, brokers | Helps verify identity beyond tail number; tracks lifecycle events         |
+| `yearmfr` / `yearmfg`       | getRegNumber, condensed                   | Manufacturing year                                      | Brokers, analysts, maintenance   | Age drives valuation, maintenance expectations, and buyer psychology      |
+| `yeardlv`                   | getRegNumber, condensed                   | Delivery year                                           | Brokers, analysts                | More precise “age” signal for valuation / market narrative                |
+
+---
+
+## 2) Base / location / classification
+
+| Field                                    | Endpoint                | Meaning                                  | Important to                 | Why it matters                                                              |
+| ---------------------------------------- | ----------------------- | ---------------------------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| `baseicao`                               | getRegNumber, condensed | Based airport (ICAO)                     | Brokers, sales, ops          | Location predicts operating profile, tax exposure, and call strategy        |
+| `baseairport` / `basename`               | getRegNumber, condensed | Human-readable base airport              | Brokers, sales               | Helps users instantly understand location without ICAO literacy             |
+| `baseiata`                               | condensed               | IATA code when available                 | UI/UX, ops                   | Useful shorthand in UI chips; aids recognition                              |
+| `basecity` / `basestate` / `basecountry` | condensed               | Base geography                           | Brokers, marketing, analysts | Geography drives buyer pool, utilization patterns, and compliance/tax flags |
+| `weightclass`                            | getRegNumber, condensed | Weight class bucket                      | Ops, analysts                | Helps categorize and compare; can change regulatory/operational assumptions |
+| `categorysize`                           | getRegNumber, condensed | Size segment (e.g., Multi-Engine Piston) | Brokers, product             | Instantly frames the aircraft’s mission and market segment                  |
+
+---
+
+## 3) Ops / usage / status flags
+
+| Field               | Endpoint                             | Meaning                                        | Important to              | Why it matters                                                                        |
+| ------------------- | ------------------------------------ | ---------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------- |
+| `ownership`         | getRegNumber                         | Ownership type (e.g., wholly owned)            | Brokers, compliance, tax  | Signals complexity: fractional/managed vs privately held affects outreach + diligence |
+| `usage` / `acusage` | getRegNumber, condensed              | Typical usage (Business/Personal/etc.)         | Brokers, analysts         | Usage correlates with condition, utilization, and selling probability                 |
+| `maintained`        | getRegNumber, condensed, maint block | Regulatory/maintenance context (Part 91, etc.) | Ops, maintenance, brokers | Part 91 vs 135 changes maintenance rigor expectations and buyer confidence            |
+| `status`            | condensed                            | Market status (Not for Sale / For Sale, etc.)  | Brokers, sales            | Defines “is this a live opportunity” and whether outreach is appropriate              |
+| `lifecycle`         | condensed                            | InOperation vs out-of-service state            | Brokers, analysts         | Quickly indicates if it’s active, stored, retired, etc.                               |
+| `regexpiresdate`    | condensed                            | Registration expiration date                   | Compliance, ops           | Expiration risk and paperwork urgency; can signal neglect if near-term                |
+| `datepurchased`     | condensed                            | Owner purchase date                            | Brokers, analysts         | Core “ownership length” signal; long hold = stable, short hold = potential churn      |
+| `datechanged`       | condensed                            | Last record change date                        | Analysts, data QA         | Recency indicator; helps decide whether to trust certain fields                       |
+| `timesasofdate`     | condensed                            | Date that times are current to                 | Brokers, maintenance      | Prevents misinterpretation of hours; recency drives diligence                         |
+
+---
+
+## 4) Relationship graph — companies, contacts, roles
+
+### A) getRelationships (normalized edges) — **source of truth for CRM and role mapping**
+
+| Field                                   | Endpoint         | Meaning                                | Important to         | Why it matters                                                         |
+| --------------------------------------- | ---------------- | -------------------------------------- | -------------------- | ---------------------------------------------------------------------- |
+| `relationships[].companyid` (COMPID)    | getRelationships | Company key tied to aircraft           | CRM, sales, analysts | Stable ID for dedupe/upsert; prevents “same-name” errors               |
+| `relationships[].contactid` (CONTACTID) | getRelationships | Contact key tied to aircraft           | CRM, sales           | Stable ID for dedupe and outreach workflows                            |
+| `relationships[].relationtype`          | getRelationships | Role (Owner/Operator/Chief Pilot/etc.) | Brokers, sales, ops  | Defines who to call for what (buyer vs operator vs decision maker)     |
+| `relationships[].relationseqno`         | getRelationships | Sequence/priority of relationship      | Brokers, UI          | Determines ordering; avoids duplicate role confusion                   |
+| `relationships[].isoperator`            | getRelationships | Operator flag (Y/N)                    | Ops, brokers         | Operator is often the best operational intel; owner is best sale intel |
+| `relationships[].businesstype`          | getRelationships | Business type (End User, etc.)         | Sales, analysts      | Helps segment outreach and interpret behavior                          |
+| `relationships[].company.{...}`         | getRelationships | Embedded company profile               | Sales, CRM           | Enables immediate display and CRM upsert without extra calls           |
+| `relationships[].contact.{...}`         | getRelationships | Embedded contact profile               | Sales, CRM           | Enables quick contact card display; can trigger enrichment if sparse   |
+
+### B) getRegNumber companyrelationships[] — **fast placeholder only**
+
+| Field group                             | Endpoint     | Meaning                       | Important to | Why it matters                                                                |
+| --------------------------------------- | ------------ | ----------------------------- | ------------ | ----------------------------------------------------------------------------- |
+| `aircraftresult.companyrelationships[]` | getRegNumber | Quick relationship snapshot   | UI, product  | Lets UI render “Owner/Operator” immediately while waiting on getRelationships |
+| `companyrelation`                       | getRegNumber | Role label                    | Brokers      | Quick context for “who is around this aircraft”                               |
+| Inline company fields                   | getRegNumber | Company identity/contact info | Sales        | Useful fallback; not as scalable/normalized as getRelationships               |
+
+### C) getCondensedOwnerOperators flattened role blocks — **best for “broker card,” not graph truth**
+
+| Field group                 | Endpoint  | Meaning                       | Important to   | Why it matters                                                                 |
+| --------------------------- | --------- | ----------------------------- | -------------- | ------------------------------------------------------------------------------ |
+| `comp1*` / `contact1*`      | condensed | Primary owner block           | Brokers, sales | Gives immediate “who owns it” with address/title; good for outreach posture    |
+| `comp2*` / `contact2*`      | condensed | Operator block                | Ops, brokers   | Operator is the operational gatekeeper; often has best utilization knowledge   |
+| `chpilotcomp*` / `chpilot*` | condensed | Chief pilot block             | Brokers, ops   | Best “inside intel” contact; can reveal selling intent and condition narrative |
+| `excbroker*`                | condensed | Exclusive broker (if present) | Brokers        | Critical: if non-zero, outreach should shift to broker-to-broker dynamics      |
+
+---
+
+## 5) Image and valuation
+
+| Field         | Endpoint  | Meaning                      | Important to      | Why it matters                                                            |
+| ------------- | --------- | ---------------------------- | ----------------- | ------------------------------------------------------------------------- |
+| `acimageurl`  | condensed | Aircraft photo (signed URL)  | Brokers, UI/UX    | Visual anchor; improves engagement and recall (and the “hot or not” feel) |
+| `acimagedate` | condensed | Date photo taken/added       | Brokers, analysts | Recency and authenticity cue; older images can imply stale listing data   |
+| `evalue`      | condensed | Specific eValue (if present) | Brokers, analysts | Pricing anchor for negotiation narrative                                  |
+| `avgevalue`   | condensed | Average valuation figure     | Brokers, sales    | Quick market-value baseline; fuels “why this is interesting”              |
+
+---
+
+## 6) Times, engines, maintenance, interiors/exteriors, avionics (“spec stack”)
+
+### A) Utilization & time summary
+
+| Field                      | Endpoint  | Meaning                                 | Important to         | Why it matters                                                      |
+| -------------------------- | --------- | --------------------------------------- | -------------------- | ------------------------------------------------------------------- |
+| `aftt`                     | condensed | Airframe total time                     | Brokers, maintenance | High-level wear/age proxy; core diligence signal                    |
+| `estaftt` / `estflighthrs` | condensed | Estimated time / estimated flight hours | Analysts, brokers    | Helps normalize gaps; signals if reported time is incomplete        |
+| `estcycles` / `landings`   | condensed | Cycles/landings                         | Maintenance, buyers  | Cycle-driven maintenance can matter more than hours for some assets |
+| `passgr`                   | condensed | Passenger indicator (if used)           | Analysts, ops        | Can hint at mission profile; sometimes sparse                       |
+
+### B) Engines
+
+| Field group                                | Endpoint  | Meaning                               | Important to         | Why it matters                                                        |
+| ------------------------------------------ | --------- | ------------------------------------- | -------------------- | --------------------------------------------------------------------- |
+| `engmodel`                                 | condensed | Engine model                          | Maintenance, brokers | Determines overhaul costs, reliability narrative, and parts ecosystem |
+| `eng1tt`, `eng2tt`                         | condensed | Engine time since new/reman (summary) | Maintenance, buyers  | Fast “where are we in the cycle” glance                               |
+| `tbo1`, `tbo2`                             | condensed | Time Between Overhaul                 | Maintenance, brokers | Lets you derive “TBO remaining” which is an instant buyer question    |
+| `aircraftowneroperatorengines[].engines[]` | condensed | Structured per-engine stats           | Maintenance          | Used for detailed engine cards and calculators                        |
+
+### C) Maintenance detail
+
+| Field                        | Endpoint    | Meaning                     | Important to         | Why it matters                                                     |
+| ---------------------------- | ----------- | --------------------------- | -------------------- | ------------------------------------------------------------------ |
+| `mxprog`                     | condensed   | Maintenance program summary | Maintenance, brokers | Buyer confidence cue; unknown program increases diligence risk     |
+| `airframemaintenanceprogram` | maint block | Named program               | Maintenance          | Supports compliance posture and program comparisons                |
+| `airframetrackingprogram`    | maint block | Tracking system/program     | Maintenance          | Tracking rigor correlates with record quality                      |
+| `notes`                      | maint block | Free-text notes             | Brokers, maintenance | Often contains the “story” (e.g., times since reman) — high signal |
+| `damagestatus`               | maint block | Damage history indicator    | Brokers, compliance  | One of the first diligence questions; needs prominent surfacing    |
+
+### D) Avionics
+
+| Field                                                | Endpoint  | Meaning                         | Important to                         | Why it matters                                         |
+| ---------------------------------------------------- | --------- | ------------------------------- | ------------------------------------ | ------------------------------------------------------ |
+| `avionics`                                           | condensed | Avionics package summary string | Brokers                              | Quick scan: tells if modernized or legacy              |
+| `aircraftowneroperatoravionics[].aircraftAvionics[]` | condensed | Structured avionics list        | Pilots, maintenance, advanced buyers | Supports detailed capability view and upgrade planning |
+
+### E) Interior / Exterior
+
+| Field group                                          | Endpoint  | Meaning                                          | Important to    | Why it matters                                                          |
+| ---------------------------------------------------- | --------- | ------------------------------------------------ | --------------- | ----------------------------------------------------------------------- |
+| `aircraftowneroperatorinteriors[].aircraftDetails[]` | condensed | Interior descriptions (seats, cabinetry, config) | Brokers, buyers | Buyer emotion + condition narrative; supports “presentation quality”    |
+| `aircraftowneroperatorexteriors[].aircraftDetails[]` | condensed | Exterior colors/paint                            | Brokers         | First-impression value; can suggest repaint needs or pride of ownership |
+
+### F) Misc / documents
+
+(These are present but null in your sample; still worth mapping.)
+
+| Field                                                    | Endpoint  | Meaning                 | Important to                 | Why it matters                                              |
+| -------------------------------------------------------- | --------- | ----------------------- | ---------------------------- | ----------------------------------------------------------- |
+| `infavorof`, `docdate`, `doctype`, `docamount`, `lessor` | condensed | Lien/lease/doc metadata | Compliance, finance, brokers | Financing/encumbrance signals; impacts transaction friction |
+
+---
+
+## Recommended “importance tagging” for the UI
+
+If you want ergonomic display, tag fields by audience:
+
+* **Broker-critical**: `status`, `datepurchased`, `relationships(relationtype/isoperator)`, `avgevalue`, `aftt`, `timesasofdate`, `acimageurl`, base city/state
+* **Ops-critical**: `isoperator`, `maintained`, `mxprog`, engines arrays, avionics list
+* **CRM-critical**: `COMPID`, `CONTACTID`, `company/contact embedded objects`, `relationtype`, `relationseqno`
+* **Compliance-critical**: `regexpiresdate`, damage status, lien/doc fields
+
+If you want, I’ll produce a second version of this table with a final column: **“How it should appear in the UI”** (chip, badge, timeline event, card row, hidden behind “Details”, etc.).

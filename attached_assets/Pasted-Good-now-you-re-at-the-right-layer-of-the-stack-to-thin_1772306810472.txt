@@ -1,0 +1,304 @@
+Good — now you’re at the **right layer of the stack** to think like a product designer instead of an API integrator.
+
+You now have three tiers of data:
+
+1. **Identity layer** — getRegNumber
+   → what aircraft is this?
+
+2. **Operational + physical layer** — getCondensedOwnerOperators
+   → what *is this airplane like*?
+
+3. **Relationship graph layer** — getRelationships
+   → who actually matters around this airplane?
+
+The mistake most aviation apps make is showing this as **one long spec sheet**.
+Brokers, operators, and analysts do **decision scanning**, not reading.
+
+Below are ergonomic display strategies specifically optimized for your *Jetnet Insight / Hot-or-Not style app*.
+
+---
+
+# Core Principle (Most Important)
+
+Design for **progressive certainty**.
+
+A broker asks subconsciously:
+
+1. *Is this worth my time?* (3 seconds)
+2. *Who owns/runs it?* (10 seconds)
+3. *What condition/utilization story does it tell?* (30 seconds)
+4. *Should I call someone?* (60 seconds)
+
+Your UI should reveal information in exactly that order.
+
+---
+
+# 1️⃣ The “Aircraft Intelligence Header” (Above the Fold)
+
+### Purpose
+
+Instant recognition + emotional anchor.
+
+### Display
+
+Large hero card:
+
+**LEFT**
+
+* Aircraft image (`acimageurl`)
+* Tail number (large)
+* Make Model Year
+* Status badge:
+
+  * 🟢 In Operation
+  * 🔴 For Sale
+  * 🟡 Recently Changed
+
+**RIGHT — Quick Intelligence Chips**
+
+* Base: KEEN (NH)
+* Usage: Business
+* Ownership: Wholly Owned
+* Maintenance: Part 91
+* Category: Multi-Engine Piston
+
+👉 These are scanning cues, not data fields.
+
+---
+
+# 2️⃣ Broker Decision Score Row (New — Highly Recommended)
+
+You already have enough signals to compute this.
+
+Display 4–5 visual gauges:
+
+| Signal                 | Derived From                  |
+| ---------------------- | ----------------------------- |
+| Ownership Stability    | datepurchased + relationships |
+| Utilization            | aftt vs estaftt               |
+| Upgrade Potential      | avionics age                  |
+| Market Position        | avgevalue + lifecycle         |
+| Engagement Opportunity | contact completeness          |
+
+Visual:
+
+```
+███████░░ Stable Ownership
+████░░░░ Moderate Utilization
+████████ High Upgrade Potential
+```
+
+This becomes your app’s differentiator.
+
+---
+
+# 3️⃣ Relationship Panel (MOST IMPORTANT UX CHANGE)
+
+Do NOT show raw rows.
+
+Instead show:
+
+## “People Around This Aircraft”
+
+Single company card:
+
+**Chartwell Services, Inc.**
+📍 Swanzey, NH
+
+Role chips:
+[ OWNER ] [ OPERATOR ] [ CHIEF PILOT ]
+
+Contact card nested:
+
+```
+Richard J. Kasper
+President
+📞 603-352-2581
+[ Call ] [ Text ] [ Save Contact ]
+```
+
+### Why this works
+
+Your APIs return duplicates intentionally — users should never see duplicates.
+
+You visually communicate:
+👉 “One organization runs everything.”
+
+---
+
+# 4️⃣ Timeline Panel (Huge Cognitive Win)
+
+You already have:
+
+* datepurchased
+* datechanged
+* regexpiresdate
+* timesasofdate
+
+Display as:
+
+```
+2011  ─ Purchased
+2016  ─ Record Updated
+2027  ─ Registration Expires
+```
+
+Humans understand time faster than tables.
+
+---
+
+# 5️⃣ Operational Health Card
+
+Derived from condensed endpoint:
+
+Show:
+
+**Aircraft Health**
+
+* Total Time: 1,580 hrs
+* Estimated Total: 1,984 hrs
+* Engines: IO-550-C
+* TBO Remaining: ~95%
+
+Use color indicators:
+
+* Green = low time
+* Amber = mid life
+* Red = approaching overhaul
+
+This instantly answers:
+👉 “Is this a good airplane?”
+
+---
+
+# 6️⃣ Avionics — Stop Listing Equipment
+
+Instead group by capability:
+
+### Flight Deck Capability
+
+✅ IFR Equipped
+✅ Autopilot (KFC-200)
+✅ WAAS GPS
+✅ Weather Radar
+✅ TCAS
+
+Expandable section reveals raw list.
+
+Brokers think in *capabilities*, not part numbers.
+
+---
+
+# 7️⃣ Interior / Exterior = Visual Summary First
+
+Show:
+
+```
+Executive Configuration
+Tan leather interior
+Rosewood cabinetry
+```
+
+NOT:
+
+```
+configuration: Executive
+sidewalls: Fabric & leather
+carpet: Tan tweed
+```
+
+Translate structured data → narrative summary.
+
+---
+
+# 8️⃣ “Market Snapshot” Card
+
+Using:
+
+* avgevalue
+* lifecycle
+* status
+
+Display:
+
+```
+Estimated Market Value
+$669,734
+
+Market Position:
+Typical privately operated Baron 58
+Not currently listed for sale
+```
+
+This anchors broker pricing intuition immediately.
+
+---
+
+# 9️⃣ Smart Action Bar (Critical for Adoption)
+
+Sticky bottom bar:
+
+```
+[ Call Owner ]
+[ Add to CRM ]
+[ Generate AI Summary ]
+[ Compare Similar Aircraft ]
+```
+
+Your app wins if users act — not read.
+
+---
+
+# 🔟 AI Insight Panel (Your Killer Feature)
+
+Now that all data is normalized:
+
+Auto-generate:
+
+> “This aircraft appears to be long-term privately operated with stable ownership since 2011. Low utilization and legacy avionics suggest strong upgrade potential rather than imminent resale.”
+
+This is where your app becomes addictive.
+
+---
+
+# 11️⃣ Progressive Reveal Layout (Apple-style)
+
+Order vertically:
+
+1. Hero Aircraft Card
+2. Decision Scores
+3. People Around Aircraft
+4. Operational Health
+5. Market Snapshot
+6. Timeline
+7. Avionics (collapsed)
+8. Interior/Exterior (collapsed)
+9. Raw Data (expert mode)
+
+---
+
+# 12️⃣ One BIG UX Insight (from aviation reality)
+
+Your users are not asking:
+
+> “What avionics does it have?”
+
+They are asking:
+
+> “Is this airplane interesting enough to pursue?”
+
+Every screen should answer that question faster.
+
+---
+
+## If you want next-level (and honestly where this app becomes elite)
+
+Next I can design the **“Broker Cognitive Flow” UI** — the exact screen layout Jony Ive / Palantir Foundry style where data *fills in live* as endpoints return, matching your async workflow perfectly.
+
+That will directly map to:
+
+* getRegNumber → header appears
+* condensed → aircraft fills in
+* relationships → people animate in
+
+…and it will feel *alive*.
