@@ -13,7 +13,9 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePersona } from "@/contexts/PersonaContext";
 import { useThemeColors } from "@/constants/colors";
+import { PERSONAS } from "@/constants/personas";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -28,6 +30,7 @@ export default function SettingsScreen() {
     recentSearches,
     clearRecentSearches,
   } = useAuth();
+  const { personaId, personaConfig } = usePersona();
 
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
 
@@ -91,6 +94,33 @@ export default function SettingsScreen() {
             <Ionicons name="shield-checkmark" size={20} color={colors.success} />
             <Text style={[styles.rowText, { color: colors.text }]}>Connected</Text>
           </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+          Active Persona
+        </Text>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <View style={styles.row}>
+            <Ionicons
+              name={personaConfig ? "person-circle" : "person-circle-outline"}
+              size={20}
+              color={personaConfig ? colors.tint : colors.textSecondary}
+            />
+            <Text style={[styles.rowText, { color: colors.text }]}>
+              {personaConfig ? personaConfig.label : "No persona selected"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.actionRow, { borderTopColor: colors.border }]}
+            onPress={() => router.push("/select-persona")}
+          >
+            <Text style={[styles.actionText, { color: colors.accent }]}>
+              {personaConfig ? "Change Persona" : "Select Persona"}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.accent} />
+          </TouchableOpacity>
         </View>
       </View>
 

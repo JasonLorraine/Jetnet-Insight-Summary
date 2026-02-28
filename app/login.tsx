@@ -13,6 +13,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePersona } from "@/contexts/PersonaContext";
 import { useThemeColors } from "@/constants/colors";
 
 export default function LoginScreen() {
@@ -20,6 +21,7 @@ export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const colors = useThemeColors(colorScheme);
   const { login } = useAuth();
+  const { isPersonaSelected } = usePersona();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +40,11 @@ export default function LoginScreen() {
 
     try {
       await login(email.trim(), password);
-      router.replace("/search");
+      if (isPersonaSelected) {
+        router.replace("/search");
+      } else {
+        router.replace("/select-persona");
+      }
     } catch (err: any) {
       const msg = err.message || "Connection failed.";
       setError(msg);

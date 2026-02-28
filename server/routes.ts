@@ -7,14 +7,18 @@ import { generateFlightSummary } from "./services/flightSummary";
 import { normalizeFlights, analyzeFlights } from "./services/flightAnalyzer";
 import { normalizeRelationships } from "./services/relationshipsService";
 import { rankContacts } from "./services/brokerContactRanker";
-import { getFlightDataPaged, lookupByRegistration, getRelationships } from "./jetnet/api";
+import { rankContactsForPersona } from "./agents/contact-ranker";
+import { dispatchToAgent } from "./agents/dispatcher";
+import { computeConfidence } from "./agents/confidence";
+import { getFlightDataPaged, lookupByRegistration, getRelationships, getHistoryListPaged } from "./jetnet/api";
 import { mountMcpServer } from "./mcp/server";
 import { randomUUID } from "crypto";
 import type { IntelResponse } from "../shared/types";
+import type { PersonaId, PersonaIntelPayload } from "../shared/types/persona";
 
 const sessions = new Map<
   string,
-  { jetnetSession: SessionState; expiresAt: Date }
+  { jetnetSession: SessionState; expiresAt: Date; personaId?: string }
 >();
 
 const relationshipsCache = new Map<
@@ -61,14 +65,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "Email and password required." });
       }
 
+      const { personaId } = req.body;
       const jetnetSession = await login(jetnetEmail, jetnetPassword);
       const appToken = randomUUID();
       const expiresAt = new Date(Date.now() + 55 * 60 * 1000);
-      sessions.set(appToken, { jetnetSession, expiresAt });
+      sessions.set(appToken, { jetnetSession, expiresAt, personaId: personaId || undefined });
 
       return res.json({
         appSessionToken: appToken,
         expiresAt: expiresAt.toISOString(),
+        personaId: personaId || null,
       });
     } catch (err: any) {
       return res
@@ -99,6 +105,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .status(500)
         .json({ message: err.message || "Health check failed." });
     }
+  });
+
+  app.get("/api/auth/persona", (req: Request, res: Response) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) return res.status(401).json({ message: "No session token." });
+    const entry = sessions.get(token);
+    if (!entry) return res.status(401).json({ message: "Session expired." });
+    return res.json({ personaId: entry.personaId || null });
+  });
+
+  app.post("/api/auth/persona", (req: Request, res: Response) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) return res.status(401).json({ message: "No session token." });
+    const entry = sessions.get(token);
+    if (!entry) return res.status(401).json({ message: "Session expired." });
+    const { personaId } = req.body;
+    if (!personaId) return res.status(400).json({ message: "personaId required." });
+    entry.personaId = personaId;
+    return res.json({ personaId });
   });
 
   app.get(
@@ -312,6 +337,181 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const status = err instanceof JetnetError ? 502 : 500;
         return res.status(status).json({
           message: err.message || "Failed to fetch relationships.",
+          source: err instanceof JetnetError ? "jetnet" : "internal",
+        });
+      }
+    }
+  );
+
+  app.post(
+    "/api/aircraft/:registration/persona-intel",
+    async (req: Request, res: Response) => {
+      try {
+        const token = req.headers.authorization?.replace("Bearer ", "") || "";
+        const session = getSession(req);
+        if (!session) {
+          return res.status(401).json({ message: "Not authenticated." });
+        }
+
+        const entry = sessions.get(token);
+        const sessionPersonaId = entry?.personaId as PersonaId | undefined;
+        const bodyPersonaId = req.body.personaId as PersonaId | undefined;
+        const personaId = bodyPersonaId || sessionPersonaId || "dealer_broker";
+
+        const { provider, apiKey, maxTokens } = req.body;
+        if (!provider || !apiKey) {
+          return res.status(400).json({ message: "Provider and API key required." });
+        }
+
+        const fresh = await ensureSession(session);
+        if (entry) entry.jetnetSession = fresh;
+
+        const profile = await buildAircraftProfile(req.params.registration, fresh);
+        const acid = profile.aircraftId;
+
+        const rawRelationships = await getRelationships(acid, fresh);
+        const graph = normalizeRelationships(rawRelationships);
+        const rankedContacts = rankContactsForPersona(personaId, graph);
+
+        let flightIntelData: PersonaIntelPayload["flightIntel"] = null;
+        try {
+          const flightRaw = await getFlightDataPaged(acid, fresh);
+          const flights = normalizeFlights(flightRaw);
+          if (flights.length > 0) {
+            const intel = analyzeFlights(flights);
+            flightIntelData = {
+              available: true,
+              totalFlights: intel.totalFlights,
+              totalHours: intel.totalHours ?? undefined,
+              avgFlightsPerMonth: intel.avgFlightsPerMonth,
+              topRoutes: intel.topRoutes.slice(0, 5).map((r) => ({
+                from: r.route.split("→")[0]?.trim() || "",
+                to: r.route.split("→")[1]?.trim() || "",
+                count: r.count,
+              })),
+              topAirports: intel.topAirports.slice(0, 5).map((a) => ({
+                code: a.airport,
+                count: a.count,
+                role: a.airport === intel.primaryBase ? "base" : "destination",
+              })),
+              estimatedHomeBase: intel.primaryBase || undefined,
+            };
+          }
+        } catch (e) {
+          console.warn("[persona-intel] Flight data fetch failed:", (e as Error).message);
+        }
+
+        let transactionsIntelData: PersonaIntelPayload["transactionsIntel"] = null;
+        try {
+          const historyRaw = await getHistoryListPaged(acid, fresh);
+          const histArr = (historyRaw as any)?.historyresult || (historyRaw as any)?.HistoryResult || [];
+          if (Array.isArray(histArr) && histArr.length > 0) {
+            transactionsIntelData = {
+              available: true,
+              totalTransactions: histArr.length,
+              transactions: histArr.slice(0, 10).map((t: any) => ({
+                date: t.transactiondate || t.TransactionDate || "",
+                type: t.transactiontype || t.TransactionType || "",
+                buyer: t.buyer || t.Buyer || undefined,
+                seller: t.seller || t.Seller || undefined,
+                price: t.price ? Number(t.price) : undefined,
+              })),
+              lastSaleDate: histArr[0]?.transactiondate || histArr[0]?.TransactionDate || undefined,
+            };
+          }
+        } catch (e) {
+          console.warn("[persona-intel] Transaction history fetch failed:", (e as Error).message);
+        }
+
+        let marketIntelData: PersonaIntelPayload["marketIntel"] = null;
+        if (profile.modelTrends) {
+          marketIntelData = {
+            available: true,
+            avgDaysOnMarket: profile.modelTrends.avgDaysOnMarket ?? undefined,
+            modelForSaleCount: profile.modelTrends.forSaleCount ?? undefined,
+          };
+        }
+
+        const payload: PersonaIntelPayload = {
+          request: {
+            personaId,
+            mode: "all",
+            tone: "",
+            maxOutreachLength: { emailWords: 140, smsChars: 240 },
+          },
+          aircraft: {
+            regNbr: profile.registration,
+            acid,
+            model: profile.model,
+            year: profile.yearMfr,
+            serialNumber: profile.serialNumber,
+            make: profile.make,
+            category: profile.categorySize,
+            weightClass: profile.weightClass,
+            lifecycleStatus: profile.lifecycleStatus,
+            forSale: profile.marketSignals.forSale,
+            baseCity: profile.baseLocation.city || undefined,
+            baseCountry: profile.baseLocation.country || undefined,
+            askingPrice: profile.marketSignals.askingPrice || undefined,
+            daysOnMarket: profile.marketSignals.daysOnMarket || undefined,
+          },
+          companies: graph.companies.map((c) => ({
+            companyId: c.companyId,
+            companyName: c.companyName,
+            relationshipRole: graph.edges.find((e) => e.companyId === c.companyId)?.relationshipType || "",
+          })),
+          contacts: rankedContacts.map((c) => ({
+            contactId: c.contactId ?? 0,
+            companyId: c.companyId ?? 0,
+            fullName: `${c.firstName} ${c.lastName}`.trim(),
+            firstName: c.firstName,
+            lastName: c.lastName,
+            title: c.title || "",
+            relationshipType: c.relationshipType,
+            emails: c.emails,
+            phones: { mobile: c.phones.mobile || undefined, work: c.phones.work || undefined },
+          })),
+          recommendations: rankedContacts.map((c) => ({
+            contactId: c.contactId ?? 0,
+            companyId: c.companyId ?? 0,
+            relationshipType: c.relationshipType,
+            tier: c.tier,
+            score: c.score,
+            reasons: c.reasons,
+            preferredChannels: c.preferredChannels,
+          })),
+          flightIntel: flightIntelData,
+          transactionsIntel: transactionsIntelData,
+          marketIntel: marketIntelData,
+        };
+
+        const confidence = computeConfidence(personaId, payload);
+
+        const { response: aiResponse } = await dispatchToAgent(
+          personaId,
+          payload,
+          provider,
+          apiKey,
+          maxTokens || 2000
+        );
+
+        aiResponse.dataConfidence = confidence;
+
+        return res.json({
+          personaId,
+          aiResponse,
+          contacts: rankedContacts,
+          payload: {
+            aircraft: payload.aircraft,
+            flightIntel: payload.flightIntel,
+            transactionsIntel: payload.transactionsIntel,
+            marketIntel: payload.marketIntel,
+          },
+        });
+      } catch (err: any) {
+        const status = err instanceof JetnetError ? 502 : 500;
+        return res.status(status).json({
+          message: err.message || "Failed to generate persona intelligence.",
           source: err instanceof JetnetError ? "jetnet" : "internal",
         });
       }

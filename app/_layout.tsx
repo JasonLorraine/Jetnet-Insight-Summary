@@ -8,6 +8,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { PersonaProvider } from "@/contexts/PersonaContext";
 import { useThemeColors } from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
@@ -52,6 +53,10 @@ function RootLayoutNav() {
         name="settings"
         options={{ title: "Settings", presentation: "modal" }}
       />
+      <Stack.Screen
+        name="select-persona"
+        options={{ title: "Choose Your Role", presentation: "modal" }}
+      />
     </Stack>
   );
 }
@@ -65,11 +70,13 @@ export default function RootLayout() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <RootLayoutNav />
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+          <PersonaProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <KeyboardProvider>
+                <RootLayoutNav />
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </PersonaProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
