@@ -1,0 +1,123 @@
+Yes — the **core plan still holds** (relationships-first enrichment + broker-first surfacing). Based on what I can actually see in your latest repo history, your recent changes look directionally good, but they **don’t replace** the need for `getRelationships` as the enrichment backbone.
+
+### What changed in your latest pass (and why it matters)
+
+1. **You added broker actions (call / text / email) to contacts.**
+   That’s exactly aligned with the “broker usefulness” goal. You updated `ContactRow` and adjusted the profile builder to separate mobile vs office, plus prefilling messaging context. ([GitHub][1])
+
+2. **You removed sensitive debug logging (REG + ACID) from the flight flow.**
+   Also correct — that was PII-ish and would leak broker lookups into logs. ([GitHub][2])
+
+So: **UI/UX for outreach is moving the right way.** Your *data* still needs the relationships layer to be complete.
+
+---
+
+## What I’d add on this pass (high leverage)
+
+### 1) Stop treating “Key Contacts” as a single source
+
+Right now your “Key Contacts” concept appears to be fed from whatever the profile builder returns (likely owner-ish). That’s fine as a first view, but brokers need:
+
+* **Owner**
+* **Operator**
+* **Manager**
+* **Finance/Admin**
+* **Aviation department**
+* **Scheduler/dispatch (often the fastest intel)**
+
+`getRelationships` is the endpoint that makes that possible.
+
+**Add:** “Top Contacts” should be a *ranked slice* of the relationship graph, not a flat list.
+
+---
+
+### 2) Add role + relationship badge everywhere you show a person
+
+A contact row should always show a compact badge like:
+
+* **Owner Rep**
+* **Operator**
+* **Management**
+* **DOM**
+* **Chief Pilot**
+* **Scheduler**
+* **Controller / CFO**
+
+Because brokers don’t contact “people”, they contact **roles**.
+
+---
+
+### 3) Dedup + merge contacts across roles
+
+Same `CONTACTID` will show up multiple times across roles/companies.
+
+**Rule:** merge into one “Contact Card”, show multiple badges, and compute a combined score.
+
+---
+
+### 4) Add a “Contact Pack” export (killer broker feature)
+
+One tap: **Copy Contact Pack**
+Copies a clean block of text:
+
+* Aircraft / tail
+* Top companies (Owner/Operator/Manager)
+* Top contacts with email + mobile + role badges
+
+Brokers paste this into email/CRM instantly.
+
+---
+
+### 5) Add a broker-safe fallback when contact fields are missing
+
+If you have:
+
+* no mobile → hide text button
+* no email → hide email button
+* only office → call still works
+
+No red error states. Just “Not available”.
+
+---
+
+### 6) Cache relationships 24–72 hours
+
+Relationships are not flight-activity volatile.
+
+Cache key by `ACID`:
+
+* `relationships:{acid}` TTL 24h
+  Add a manual **Refresh** button if you want.
+
+---
+
+### 7) Add a “People” tab, not just a section
+
+Once `getRelationships` is in:
+
+* **People (ranked)**
+* **Companies**
+* **Graph (optional)**
+
+Your app becomes a broker tool instead of a profile viewer.
+
+---
+
+## What I *couldn’t* verify from the repo
+
+GitHub’s file viewer content didn’t render cleanly via my tooling for the current `main` branch, so I **could not confirm** whether you’ve already wired `POST /api/Aircraft/getRelationships/{{apiToken}}` into the runtime flow, or whether your current contacts are still derived from a different endpoint. I *can* confirm the commits that added contact actions and removed sensitive logs. ([GitHub][1])
+
+---
+
+## The 2-point “still holds true” verdict
+
+✅ **Yes**: The plan (relationships-first enrichment + outreach-first UI) is still the right architecture.
+✅ **Yes**: Your latest pass improved broker actions and reduced logging risk. ([GitHub][3])
+
+---
+
+If you want me to do a real code-level confirmation: paste the current `server/routes.ts` relationship route (or wherever you’re calling JETNET endpoints) and the function that builds `profile.contacts`. I’ll tell you exactly what to change, line-by-line, to make `getRelationships` the enrichment source and to add ranking/badges/dedup correctly.
+
+[1]: https://github.com/JasonLorraine/Jetnet-Insight-Summary/commit/e042a69a1fcec33aabd8999feb680755bf9fe37f "Add ability to contact aircraft owners via call, text, or email · JasonLorraine/Jetnet-Insight-Summary@e042a69 · GitHub"
+[2]: https://github.com/JasonLorraine/Jetnet-Insight-Summary/commit/791740c896aaa524b0dab67a89eb91bf264ca5e6 "Remove sensitive debug logging from aircraft registration endpoint · JasonLorraine/Jetnet-Insight-Summary@791740c · GitHub"
+[3]: https://github.com/JasonLorraine/Jetnet-Insight-Summary/commits/main/ "Commits · JasonLorraine/Jetnet-Insight-Summary · GitHub"

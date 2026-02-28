@@ -1,0 +1,216 @@
+Yes — you *can* add “Create Contact” into the broker workflow, but **you should not auto-create silently**. The right pattern is **one-tap “Add to Contacts” with a prefilled contact card** (user confirms Save). That’s the iOS-native, broker-safe approach.
+
+Below is the updated, engineering-ready write-up that adds this feature cleanly.
+
+---
+
+## What we’re adding (one thing)
+
+**“Add to Contacts” action** on every recommended contact + a bulk option for top contacts.
+
+* Per contact: `Call | Text | Email | Add to Contacts`
+* Bulk (optional): “Add Top 3 to Contacts” → sequentially presents prefilled contact cards
+
+**No background creation. No auto-save.** Always requires explicit user save.
+
+---
+
+# Updated Instructions: Add-to-Contacts Feature
+
+## Goal
+
+Let a broker save a high-value person (with role + company context) into their phone contacts in **<10 seconds** after a tail lookup.
+
+## Success Criteria
+
+From a contact card, broker can tap **Add to Contacts** and see a prefilled contact entry containing:
+
+* Name
+* Company
+* Title
+* Email(s)
+* Phone(s)
+* Notes (tail number + relationship role)
+* Optional: address/location if available
+
+User then taps **Save** inside iOS Contacts UI.
+
+---
+
+# UX Spec
+
+## 1) Contact Card Actions
+
+Show buttons in this order:
+
+1. Call (if any phone)
+2. Text (if mobile)
+3. Email (if email)
+4. **Add to Contacts** (always available if name exists)
+
+If contact has neither email nor phone, still allow Add to Contacts (notes-only save is still useful).
+
+## 2) What gets saved into the phone contact
+
+**Contact fields mapping**
+
+* First name / last name: from API
+* Organization / Company: company name (if known)
+* Job Title: title (if known)
+* Email: primary email (if multiple, include all)
+* Phone:
+
+  * Mobile → “mobile”
+  * Office → “work”
+* Notes (very important for brokers):
+
+  * `JETNET — {RelationshipType}`
+  * `Aircraft: {regNbr} ({model})`
+  * `Company role: {Owner/Operator/Manager}` if you have it
+  * `Source: JETNET Connect`
+
+This makes the entry searchable later (“N601BE”, “Operator”, “JETNET”).
+
+---
+
+# iOS Implementation Options
+
+## Option A (Recommended): Native iOS Contact Sheet
+
+If your iOS app is Swift/SwiftUI:
+
+* Use `CNContactViewController` with `CNMutableContact`
+* Present it modally
+* User taps Save
+
+**Key advantage:** best UX, correct permissions model, no weird edge cases.
+
+### Swift sketch (engineering reference)
+
+* Build `CNMutableContact`
+* Present `CNContactViewController(forNewContact: mutableContact)`
+* Set delegate and dismiss on completion
+
+No need for Contacts write permission when using the system UI to create/save (the UI manages it).
+
+## Option B: React Native (if applicable)
+
+Use a library that opens the native “new contact” form with prefilled fields (examples exist), or use:
+
+* `react-native-contacts` (requires permissions) **or**
+* a “open contact form” helper (preferred)
+
+**Strong recommendation:** use a “prefill then user saves” path, not programmatic silent insertion.
+
+---
+
+# Backend / Data Contract Updates
+
+## 1) Ensure contact payload includes fields needed
+
+In your `recommendations` response, ensure each recommended contact returns:
+
+```json
+{
+  "contactId": 67890,
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "title": "Director of Aviation",
+  "companyName": "XYZ Aviation",
+  "relationshipType": "Operator",
+  "emails": ["jane.smith@xyzaviation.com"],
+  "phones": {
+    "mobile": "+15551234567",
+    "work": "+15552221111"
+  },
+  "regNbr": "N601BE",
+  "model": "Gulfstream G450"
+}
+```
+
+If your API returns only one email/phone, keep it simple. The UI can still map.
+
+## 2) Normalize phone formatting
+
+Normalize to E.164 if possible for storage (display can be friendly).
+If you can’t reliably normalize, store raw string but strip obvious separators.
+
+---
+
+# Frontend: Build the Prefill Contact Object
+
+## 1) Create a function: `buildPhoneContactPayload(rec)`
+
+Inputs: one recommendation/contact object
+Output: a platform contact payload
+
+### Notes field format (standardize)
+
+```
+JETNET — Operator
+Aircraft: N601BE (Gulfstream G450)
+Company: XYZ Aviation
+ContactID: 67890
+```
+
+Keep this identical everywhere so brokers learn the pattern.
+
+## 2) Add “Add to Contacts” button
+
+When tapped:
+
+* Build payload
+* Present native “New Contact” UI prefilled
+* On completion:
+
+  * If saved: toast “Saved to Contacts”
+  * If canceled: do nothing
+
+No scary error messages.
+
+---
+
+# Bulk Add (Optional, but brokers will love it)
+
+## “Add Top 3 to Contacts”
+
+Behavior:
+
+* For top 3 contacts, open the contact sheet one-by-one
+* User saves or cancels each
+* Stop on cancel? (recommend: continue unless user explicitly stops)
+
+This is perfect after a search when broker wants to save the “three heads.”
+
+---
+
+# Guardrails / Compliance
+
+* Do not auto-insert contacts silently.
+* Do not message or call automatically.
+* Always open native composer for SMS/email/contacts save.
+* Consider a small hint: “You control what gets saved.”
+
+---
+
+# Definition of Done
+
+* Each contact has “Add to Contacts”
+* Prefilled form includes name/title/company/email/phone/notes
+* Works with partial data
+* No auto-save, no background insert
+* Uses relationship labels from `getRelationships` when available
+
+---
+
+## One extra improvement I’d pair with this
+
+When user taps “Add to Contacts”, also show a tiny chooser:
+
+* “Save as new contact”
+* “Add to existing contact”
+  This avoids duplicates for brokers who already have the person.
+
+---
+
+If you tell me whether your iOS client is **Swift/SwiftUI** or **React Native**, I’ll give you the exact implementation snippet + the minimal file/architecture changes for your repo style.
