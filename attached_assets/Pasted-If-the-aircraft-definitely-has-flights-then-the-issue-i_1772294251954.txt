@@ -1,0 +1,144 @@
+If the aircraft **definitely has flights**, then the issue is almost always one of these:
+
+1. **your backend call is returning flights but your app is dropping them during normalization/analyze**, or
+2. **you’re querying the wrong internal ID / wrong “view” of flight data**, so you get an empty set even though the tail has flights elsewhere.
+
+Here’s the fastest way to prove which one it is and fix it.
+
+---
+
+## 1) Prove where the flights disappear (raw → normalized → analyzed)
+
+In `server/routes.ts`, inside the “summarize flights with AI” handler, add these logs **right after** you fetch the data:
+
+```ts
+console.log("REG:", reg);
+console.log("AircraftID used:", profile.aircraftId);
+
+console.log("flightRaw type:", typeof flightRaw, Array.isArray(flightRaw));
+console.log("flightRaw length:", Array.isArray(flightRaw) ? flightRaw.length : "not array");
+console.log("flightRaw sample:", Array.isArray(flightRaw) ? flightRaw.slice(0, 2) : flightRaw);
+
+const flights = normalizeFlights(flightRaw);
+console.log("normalized length:", flights.length);
+console.log("normalized sample:", flights.slice(0, 2));
+
+const intel = analyzeFlights(flights);
+console.log("intel:", intel);
+```
+
+### What you’ll learn immediately
+
+* If `flightRaw.length === 0` → you’re calling the wrong thing (ID/endpoint/paging/date window).
+* If `flightRaw.length > 0` but `flights.length === 0` → `normalizeFlights()` is filtering too aggressively.
+* If `flights.length > 0` but `intel.totalFlights === 0` → `analyzeFlights()` is counting only “complete” legs and ignoring what you have.
+
+---
+
+## 2) The #1 silent killer: “complete leg” requirements
+
+A lot of flight feeds will include records that are missing one of:
+
+* dep airport code
+* arr airport code
+* off/on timestamps
+* duration
+
+If your analyzer does something like “only count flights with dep+arr+time”, you’ll end up with `totalFlights = 0` even though there are rows.
+
+**Fix:** make your analyzer count *rows as flights* even if fields are partial, and track completeness separately.
+
+Example pattern:
+
+```ts
+const totalRows = flights.length;
+const completeLegs = flights.filter(f => f.dep && f.arr).length;
+
+return {
+  totalFlights: totalRows,          // <-- don’t zero this out
+  completeLegs,
+  completenessPct: totalRows ? completeLegs / totalRows : 0,
+  ...
+};
+```
+
+Then your UI can show “Flight data partial” instead of erroring.
+
+---
+
+## 3) The #2 silent killer: wrong aircraftId / wrong entity
+
+You’re calling:
+
+* `getFlightDataPaged(profile.aircraftId, fresh)`
+
+But “aircraft has flights” is usually known by **tail number** (reg) — and it’s common for systems to have multiple IDs:
+
+* current aircraft record vs historical record
+* parent vs child (fractional / managed)
+* merged records
+* old ACID that no longer maps to flight store
+
+**Quick test:** temporarily call the flight endpoint by **registration** (if your API supports it) or add a lookup step to confirm the aircraftId is the same one your flight system uses.
+
+At minimum, log `profile.aircraftId` and compare it to what you expect for that tail.
+
+---
+
+## 4) Paging/date window mismatch
+
+Even if flights exist, your wrapper might be pulling:
+
+* only page 1 (and page 1 returns empty due to sorting)
+* only last X days
+* only “completed flights” in a narrow window
+
+**Fix options:**
+
+* Increase window (e.g., last 180 days)
+* Fetch multiple pages until you have N flights or you hit an upper bound
+
+Pattern:
+
+```ts
+let all: any[] = [];
+for (let page = 1; page <= 5; page++) {
+  const chunk = await getFlightDataPaged(profile.aircraftId, fresh, { page });
+  if (!chunk?.length) break;
+  all = all.concat(chunk);
+}
+```
+
+(Adapt to your actual function signature.)
+
+---
+
+## 5) Stop using 404 for “no usable flights”
+
+Even once fixed, you’ll always have edge cases. Don’t 404 this.
+
+Return `200` with a structured fallback:
+
+```ts
+return res.json({
+  ok: true,
+  mode: "flight-ai",
+  flightsFound: flightRaw.length,
+  flightsUsable: flights.length,
+  message: flights.length ? "ok" : "no-usable-flights",
+  fallbackTo: flights.length ? null : "standard-summary"
+});
+```
+
+Your UI becomes calm and deterministic.
+
+---
+
+## What I need from you (no back-and-forth guessing)
+
+Paste **one** of these and I’ll tell you exactly which branch is failing and what to change:
+
+1. the console output of the logs above for N491N, **or**
+2. the first 1–2 objects from `flightRaw` (redact anything sensitive)
+
+Once I see whether `flightRaw` is empty vs filtered, I can give you the exact patch (normalizer vs analyzer vs ID lookup vs paging).
