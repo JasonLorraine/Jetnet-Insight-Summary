@@ -80,6 +80,13 @@ export interface UtilizationSummary {
   totalFlights: number;
   dateRange: string;
   avgFlightsPerMonth: number;
+  topRoutes?: Array<{ from: string; to: string; count: number }>;
+  topAirports?: Array<{ code: string; count: number }>;
+  windowStart?: string;
+  windowEnd?: string;
+  windowDays?: number;
+  homeBase?: string;
+  notes?: string[];
 }
 
 export interface AircraftPicture {
@@ -248,6 +255,56 @@ export interface AircraftProfile {
   specs: AircraftSpecs | null;
   evolutionLink: string;
   estimatedAFTT: number | null;
+}
+
+export interface CondensedAircraftProfile {
+  aircraftId: number;
+  regNbr: string;
+  serialNumber: string;
+  yearMfr: number;
+  make: string;
+  model: string;
+  modelId: number;
+
+  aircraftType: string;
+  category: string;
+  engineMake: string | null;
+  engineModel: string | null;
+  engineCount: number | null;
+  maxPassengers: number | null;
+  maxRange: number | null;
+  maxSpeed: number | null;
+  mtow: number | null;
+  cabinHeight: number | null;
+  cabinWidth: number | null;
+  cabinLength: number | null;
+  baggageCapacity: number | null;
+  airframeTotalHours: number | null;
+  airframeTotalLandings: number | null;
+  engineTotalHours: number | null;
+
+  country: string | null;
+  state: string | null;
+  city: string | null;
+  basedAirport: string | null;
+  lifecycle: string | null;
+
+  forSale: boolean;
+  askingPrice: number | null;
+  daysOnMarket: number | null;
+
+  avionics: string | null;
+  interiorDate: string | null;
+  exteriorDate: string | null;
+  lastInspectionType: string | null;
+  lastInspectionDate: string | null;
+
+  ownerCompanyName: string | null;
+  ownerCompanyId: number | null;
+  operatorCompanyName: string | null;
+  operatorCompanyId: number | null;
+  managerCompanyName: string | null;
+  managerCompanyId: number | null;
 }
 
 export interface AISummary {

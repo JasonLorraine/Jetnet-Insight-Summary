@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,59 +8,51 @@ import {
   RefreshControl,
   useColorScheme,
   Platform,
-  Linking,
-  Alert,
+  Animated,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useThemeColors, getScoreColor } from "@/constants/colors";
+import { useThemeColors } from "@/constants/colors";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest } from "@/lib/query-client";
-import { AircraftCard } from "@/components/AircraftCard";
-import { ScoreGauge } from "@/components/ScoreGauge";
-import { FactorBar } from "@/components/FactorBar";
-import { OwnerCard } from "@/components/OwnerCard";
-import { CompanyCard } from "@/components/CompanyCard";
-import { ContactRow, BrokerContactRow } from "@/components/ContactRow";
-import { FleetItem } from "@/components/FleetItem";
-import { SpecsSection } from "@/components/SpecsSection";
+import { usePersona } from "@/contexts/PersonaContext";
+import { useAircraftProfile } from "@/hooks/useAircraftProfile";
+import { ProfileTabs } from "@/components/ProfileTabs";
+import type { TabIndex } from "@/components/ProfileTabs";
+import { OverviewTab } from "@/components/tabs/OverviewTab";
+import { SpecsIntelTab } from "@/components/tabs/SpecsIntelTab";
+import { SummaryTab } from "@/components/tabs/SummaryTab";
 import { ProfileSkeleton } from "@/components/SkeletonLoader";
-import * as Clipboard from "expo-clipboard";
-import { Image } from "expo-image";
-import type { AircraftProfile, ModelTrendSignals, Relationship, IntelResponse, BrokerContact } from "@/shared/types";
 
 export default function AircraftProfileScreen() {
   const { registration } = useLocalSearchParams<{ registration: string }>();
-  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = useThemeColors(colorScheme);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { isLLMConfigured, addRecentSearch } = useAuth();
+  const { addRecentSearch } = useAuth();
+  const { personaId } = usePersona();
 
+  const [activeTab, setActiveTab] = useState<TabIndex>(0);
+  const [contentOpacity] = useState(new Animated.Value(1));
+
+  const webTopInset = Platform.OS === "web" ? 67 : 0;
   const webBottomInset = Platform.OS === "web" ? 34 : 0;
 
   const {
-    data: profile,
-    isLoading,
-    error,
-    refetch,
-    isRefetching,
-  } = useQuery<AircraftProfile>({
-    queryKey: ["/api/aircraft", registration, "profile"],
-    enabled: !!registration,
-  });
-
-  const {
-    data: intelData,
-    isLoading: intelLoading,
-  } = useQuery<IntelResponse>({
-    queryKey: ["/api/intel/relationships", registration],
-    enabled: !!registration && !!profile,
-  });
+    profile,
+    condensed,
+    relationships,
+    pictures,
+    phase1Status,
+    phase2Status,
+    phase3Status,
+    isPhase1Loading,
+    refetchPhase1,
+    refetchPhase2,
+  } = useAircraftProfile(registration);
 
   React.useEffect(() => {
     if (registration) {
@@ -68,7 +60,44 @@ export default function AircraftProfileScreen() {
     }
   }, [registration]);
 
-  if (isLoading) {
+  const handleTabChange = useCallback(
+    (index: TabIndex) => {
+      if (index === activeTab) return;
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      Animated.sequence([
+        Animated.timing(contentOpacity, {
+          toValue: 0,
+          duration: 100,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+      ]).start();
+      setActiveTab(index);
+    },
+    [activeTab, contentOpacity]
+  );
+
+  const handleRefresh = useCallback(() => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    queryClient.invalidateQueries({
+      queryKey: ["/api/aircraft", registration, "profile"],
+    });
+    if (activeTab >= 1) {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/aircraft/enrich"],
+      });
+    }
+  }, [registration, activeTab, queryClient]);
+
+  if (isPhase1Loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <ProfileSkeleton />
@@ -76,17 +105,31 @@ export default function AircraftProfileScreen() {
     );
   }
 
-  if (error || !profile) {
+  if (phase1Status === "error" || !profile) {
     return (
-      <View style={[styles.container, styles.errorContainer, { backgroundColor: colors.background }]}>
-        <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
-        <Text style={[styles.errorTitle, { color: colors.text }]}>Lookup Failed</Text>
-        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
-          {(error as Error)?.message || "Aircraft not found."}
+      <View
+        style={[
+          styles.container,
+          styles.errorContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <Ionicons
+          name="cloud-offline-outline"
+          size={48}
+          color={colors.secondaryLabel}
+        />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>
+          Couldn't load aircraft
+        </Text>
+        <Text
+          style={[styles.errorMessage, { color: colors.secondaryLabel }]}
+        >
+          Check your connection and try again.
         </Text>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: colors.tint }]}
-          onPress={() => refetch()}
+          onPress={() => refetchPhase1()}
         >
           <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
@@ -94,601 +137,87 @@ export default function AircraftProfileScreen() {
     );
   }
 
-  const score = profile.hotNotScore;
-  const owner = profile.relationships.find(
-    (r) => r.relationType.toLowerCase() === "owner"
-  );
-  const operator = profile.relationships.find(
-    (r) => r.relationType.toLowerCase() === "operator"
-  );
-  const hasOwnershipData =
-    owner ||
-    operator ||
-    profile.companyProfile ||
-    profile.contacts.length > 0 ||
-    (profile.ownerIntelligence?.fleetAircraft &&
-      profile.ownerIntelligence.fleetAircraft.length > 0);
-
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        paddingBottom: (insets.bottom || webBottomInset) + 20,
-        paddingHorizontal: 16,
-        paddingTop: 8,
-      }}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefetching}
-          onRefresh={() => {
-            if (Platform.OS !== "web") {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }
-            queryClient.invalidateQueries({
-              queryKey: ["/api/aircraft", registration, "profile"],
-            });
-          }}
-        />
-      }
-    >
-      {/* 0. Photo Gallery */}
-      {profile.pictures && profile.pictures.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.photoGallery}
-          contentContainerStyle={styles.photoGalleryContent}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.stickyHeader,
+          {
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.separator,
+            paddingTop: Platform.OS === "web" ? webTopInset : 0,
+          },
+        ]}
+      >
+        <Text
+          style={[styles.headerRegistration, { color: colors.text }]}
+          numberOfLines={1}
         >
-          {profile.pictures.map((pic, idx) => (
-            <View key={idx} style={styles.photoContainer}>
-              <Image
-                source={{ uri: pic.url }}
-                style={styles.photoImage}
-                contentFit="cover"
-                transition={200}
-              />
-              {pic.caption ? (
-                <Text
-                  style={[styles.photoCaption, { color: colors.textSecondary }]}
-                  numberOfLines={1}
-                >
-                  {pic.caption}
-                </Text>
-              ) : null}
-            </View>
-          ))}
-        </ScrollView>
-      ) : null}
+          {profile.registration}
+        </Text>
+        <Text
+          style={[
+            styles.headerModel,
+            { color: colors.secondaryLabel },
+          ]}
+          numberOfLines={1}
+        >
+          {profile.yearMfr} {profile.make} {profile.model}
+          {profile.series ? ` ${profile.series}` : ""}
+        </Text>
+      </View>
 
-      {/* 1. Hero — Aircraft Identity */}
-      <AircraftCard profile={profile} />
+      <ProfileTabs
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        personaId={personaId}
+        phaseStatuses={[phase1Status, phase2Status, phase3Status]}
+      />
 
-      {/* 2. "Will it sell?" — Hot/Not Score */}
-      {score ? (
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="flame-outline" size={18} color={colors.tint} />
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Will it sell?
-            </Text>
-          </View>
-          <ScoreGauge score={score.score} label={score.label} size="large" />
-          <Text style={[styles.timeToSell, { color: colors.textSecondary }]}>
-            Est. time to sell: {score.timeToSellEstimateDays} days
-          </Text>
-          <View style={styles.factorsContainer}>
-            {score.factors.map((f, i) => (
-              <FactorBar
-                key={i}
-                name={f.name}
-                value={f.value}
-                weight={f.weight}
-                explanation={f.explanation}
-              />
-            ))}
-          </View>
-          {score.assumptions.length > 0 ? (
-            <View style={[styles.assumptions, { borderTopColor: colors.border }]}>
-              <Text style={[styles.assumptionsTitle, { color: colors.textSecondary }]}>
-                Assumptions
-              </Text>
-              {score.assumptions.map((a, i) => (
-                <Text key={i} style={[styles.assumptionText, { color: colors.textSecondary }]}>
-                  {a}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      {/* 3. "Who owns this?" — Owner/Operator + Company + Contacts + Fleet */}
-      {hasOwnershipData ? (
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="people-outline" size={18} color={colors.tint} />
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Who owns this?
-            </Text>
-          </View>
-
-          <View style={styles.ownerOperatorBlock}>
-            {owner ? (
-              <RelationshipBlock
-                label="Owner"
-                rel={owner}
-                registration={profile.registration}
-                colors={colors}
-              />
-            ) : null}
-
-            {operator && operator.companyName !== owner?.companyName ? (
-              <View style={owner ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 12 } : undefined}>
-                <RelationshipBlock
-                  label="Operator"
-                  rel={operator}
-                  registration={profile.registration}
-                  colors={colors}
-                />
-              </View>
-            ) : null}
-          </View>
-
-          {profile.companyProfile ? (
-            <CompanyCard company={profile.companyProfile} />
-          ) : null}
-
-          {profile.ownerIntelligence?.fleetAircraft && profile.ownerIntelligence.fleetAircraft.length > 0 ? (
-            <View style={styles.fleetSection}>
-              <Text style={[styles.subSectionTitle, { color: colors.textSecondary }]}>
-                Fleet ({profile.ownerIntelligence.fleetAircraft.length} aircraft)
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.fleetList}
-              >
-                {profile.ownerIntelligence.fleetAircraft.map((item) => (
-                  <View key={item.aircraftId} style={styles.fleetCard}>
-                    <FleetItem
-                      aircraft={item}
-                      onPress={() =>
-                        router.push(
-                          `/aircraft/${encodeURIComponent(item.registration)}`
-                        )
-                      }
-                    />
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-
-          {intelData && intelData.recommendations.length > 0 ? (
-            <View style={styles.contactsSection}>
-              <Text style={[styles.subSectionTitle, { color: colors.textSecondary }]}>
-                Top Contacts ({intelData.recommendations.length})
-              </Text>
-              {intelData.recommendations.slice(0, 5).map((rec, i) => (
-                <BrokerContactRow
-                  key={rec.contactId ?? i}
-                  contact={rec}
-                  aircraftRegistration={profile.registration}
-                />
-              ))}
-              <View style={styles.contactActions}>
-                {intelData.recommendations.length > 5 ? (
-                  <TouchableOpacity
-                    style={[styles.contactActionButton, { backgroundColor: colors.surfaceSecondary }]}
-                    onPress={() => {
-                      if (Platform.OS !== "web") {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }
-                      router.push(`/contacts/${encodeURIComponent(registration!)}`);
-                    }}
-                  >
-                    <Ionicons name="people" size={16} color={colors.tint} />
-                    <Text style={[styles.contactActionLabel, { color: colors.tint }]}>
-                      View All Contacts
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  style={[styles.contactActionButton, { backgroundColor: colors.surfaceSecondary }]}
-                  onPress={async () => {
-                    if (Platform.OS !== "web") {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }
-                    const pack = buildContactPack(profile, intelData.recommendations);
-                    try {
-                      await Clipboard.setStringAsync(pack);
-                      Alert.alert("Copied", "Contact pack copied to clipboard.");
-                    } catch {
-                      Alert.alert("Contact Pack", pack);
-                    }
-                  }}
-                >
-                  <Ionicons name="copy" size={16} color={colors.tint} />
-                  <Text style={[styles.contactActionLabel, { color: colors.tint }]}>
-                    Copy Contact Pack
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : profile.contacts.length > 0 ? (
-            <View style={styles.contactsSection}>
-              <Text style={[styles.subSectionTitle, { color: colors.textSecondary }]}>
-                Key Contacts ({profile.contacts.length})
-              </Text>
-              {profile.contacts.slice(0, 8).map((contact, i) => (
-                <ContactRow key={i} contact={contact} aircraftRegistration={profile.registration} />
-              ))}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      {/* 4. "What is it?" — Aircraft Specs */}
-      {profile.specs ? (
-        <SpecsSection specs={profile.specs} estimatedAFTT={profile.estimatedAFTT} />
-      ) : null}
-
-      {/* 5. "Is it active?" — Utilization + Market Signals combined */}
-      <View style={[styles.section, { backgroundColor: colors.surface }]}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="pulse-outline" size={18} color={colors.tint} />
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Is it active?
-          </Text>
-        </View>
-
-        <View style={styles.utilGrid}>
-          <UtilStat
-            label="For Sale"
-            value={profile.marketSignals.forSale ? "Yes" : "No"}
-            colors={colors}
+      <ScrollView
+        style={styles.tabContent}
+        contentContainerStyle={{
+          paddingBottom: (insets.bottom || webBottomInset) + 20,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isPhase1Loading}
+            onRefresh={handleRefresh}
           />
-          {profile.marketSignals.askingPrice ? (
-            <UtilStat
-              label="Asking Price"
-              value={profile.marketSignals.askingPrice}
-              colors={colors}
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={{ opacity: contentOpacity }}>
+          {activeTab === 0 && (
+            <OverviewTab
+              profile={profile}
+              pictures={pictures}
+              isPicturesLoading={phase2Status === "loading"}
             />
-          ) : null}
-          {profile.marketSignals.daysOnMarket !== null ? (
-            <UtilStat
-              label="Days on Market"
-              value={String(profile.marketSignals.daysOnMarket)}
-              colors={colors}
+          )}
+          {activeTab === 1 && (
+            <SpecsIntelTab
+              profile={profile}
+              condensed={condensed}
+              relationships={relationships}
+              personaId={personaId}
+              isCondensedLoading={phase2Status === "loading"}
+              isRelationshipsLoading={
+                phase2Status === "loading" || phase3Status === "loading"
+              }
             />
-          ) : null}
-        </View>
-
-        {profile.utilizationSummary ? (
-          <View style={[styles.utilizationBlock, { borderTopColor: colors.border }]}>
-            <View style={styles.utilGrid}>
-              <UtilStat
-                label="Total Flights"
-                value={String(profile.utilizationSummary.totalFlights)}
-                colors={colors}
-              />
-              <UtilStat
-                label="Avg/Month"
-                value={profile.utilizationSummary.avgFlightsPerMonth.toFixed(1)}
-                colors={colors}
-              />
-              <UtilStat
-                label="Period"
-                value={profile.utilizationSummary.dateRange}
-                colors={colors}
-              />
-            </View>
-          </View>
-        ) : null}
-      </View>
-
-      {/* 6. "What's the market?" — Model Trends */}
-      {profile.modelTrends ? (
-        <ModelTrendsSection trends={profile.modelTrends} colors={colors} colorScheme={colorScheme} />
-      ) : null}
-
-      {/* 7. Owner Intelligence Deep-Dive */}
-      {profile.ownerIntelligence ? (
-        <OwnerCard intel={profile.ownerIntelligence} />
-      ) : null}
-
-      {/* 8. AI Summary */}
-      {isLLMConfigured ? (
-        <TouchableOpacity
-          style={[styles.aiButton, { backgroundColor: colors.tint }]}
-          onPress={() => {
-            if (Platform.OS !== "web") {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }
-            router.push(`/summary/${encodeURIComponent(registration!)}`);
-          }}
-        >
-          <Ionicons name="sparkles" size={20} color="#FFFFFF" />
-          <Text style={styles.aiButtonText}>Generate AI Summary</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={[styles.aiButton, { backgroundColor: colors.surfaceSecondary }]}
-          onPress={() => router.push("/setup-llm")}
-        >
-          <Ionicons name="sparkles-outline" size={20} color={colors.textSecondary} />
-          <Text style={[styles.aiButtonText, { color: colors.textSecondary }]}>
-            Configure AI for Summaries
-          </Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
-  );
-}
-
-function buildContactPack(
-  profile: AircraftProfile,
-  recommendations: BrokerContact[]
-): string {
-  const lines: string[] = [];
-  lines.push(`Aircraft: ${profile.registration} — ${profile.make} ${profile.model} (${profile.yearMfr})`);
-  lines.push("");
-
-  const owner = profile.relationships.find(r => r.relationType.toLowerCase() === "owner");
-  const operator = profile.relationships.find(r => r.relationType.toLowerCase() === "operator");
-  const manager = profile.relationships.find(r => r.relationType.toLowerCase() === "manager");
-  if (owner) lines.push(`Owner: ${owner.companyName}`);
-  if (operator && operator.companyName !== owner?.companyName) lines.push(`Operator: ${operator.companyName}`);
-  if (manager && manager.companyName !== owner?.companyName) lines.push(`Manager: ${manager.companyName}`);
-
-  const topContacts = recommendations.slice(0, 5);
-  if (topContacts.length > 0) {
-    lines.push("");
-    lines.push("Top Contacts:");
-    for (const c of topContacts) {
-      const name = `${c.firstName} ${c.lastName}`.trim();
-      const parts = [name];
-      if (c.roleBadge) parts.push(`[${c.roleBadge}]`);
-      if (c.companyName) parts.push(`— ${c.companyName}`);
-      lines.push(`  ${parts.join(" ")}`);
-      if (c.title) lines.push(`    ${c.title}`);
-      if (c.emails.length > 0) lines.push(`    ${c.emails[0]}`);
-      if (c.phones.mobile) lines.push(`    Mobile: ${c.phones.mobile}`);
-      else if (c.phones.work) lines.push(`    Work: ${c.phones.work}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
-function cleanPhone(raw: string): string {
-  return raw.replace(/[^+\d]/g, "");
-}
-
-function RelationshipBlock({
-  label,
-  rel,
-  registration,
-  colors,
-}: {
-  label: string;
-  rel: Relationship;
-  registration: string;
-  colors: Record<string, string>;
-}) {
-  const r = rel;
-  const hasPhone = !!r.contactPhone;
-  const hasEmail = !!r.contactEmail;
-
-  const handleCall = async () => {
-    if (!r.contactPhone) return;
-    const cleaned = cleanPhone(r.contactPhone);
-    if (!cleaned) return;
-    const url = `tel:${cleaned}`;
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
-      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      Linking.openURL(url);
-    } else {
-      Alert.alert("Unable to Call", `Cannot open dialer for ${r.contactPhone}`);
-    }
-  };
-
-  const handleEmail = async () => {
-    if (!r.contactEmail) return;
-    const subject = encodeURIComponent(`Regarding Aircraft ${registration}`);
-    const url = `mailto:${r.contactEmail}?subject=${subject}`;
-    const supported = await Linking.canOpenURL("mailto:");
-    if (supported) {
-      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      Linking.openURL(url);
-    } else {
-      Alert.alert("Unable to Email", `Cannot open mail client for ${r.contactEmail}`);
-    }
-  };
-
-  return (
-    <View style={styles.ownerOperatorRow}>
-      <Text style={[styles.ownerOperatorLabel, { color: colors.textSecondary }]}>
-        {label}
-      </Text>
-      <Text style={[styles.ownerOperatorName, { color: colors.text }]} numberOfLines={2}>
-        {r.companyName}
-      </Text>
-      {r.contactName ? (
-        <Text style={[styles.ownerOperatorContact, { color: colors.textSecondary }]}>
-          {r.contactName}
-          {r.contactTitle ? ` \u00B7 ${r.contactTitle}` : ""}
-        </Text>
-      ) : null}
-      {(r.city || r.state || r.country) ? (
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
-          <Text style={[styles.locationText, { color: colors.textSecondary }]}>
-            {[r.city, r.state, r.country].filter(Boolean).join(", ")}
-          </Text>
-        </View>
-      ) : null}
-      {(hasPhone || hasEmail) ? (
-        <View style={styles.relActionRow}>
-          {hasPhone ? (
-            <TouchableOpacity
-              style={[styles.relActionButton, { backgroundColor: colors.surfaceSecondary }]}
-              onPress={handleCall}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="call" size={16} color="#30D158" />
-              <Text style={[styles.relActionLabel, { color: colors.text }]}>
-                {r.contactPhone}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-          {hasEmail ? (
-            <TouchableOpacity
-              style={[styles.relActionButton, { backgroundColor: colors.surfaceSecondary }]}
-              onPress={handleEmail}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="mail" size={16} color="#FF9F0A" />
-              <Text style={[styles.relActionLabel, { color: colors.text }]} numberOfLines={1}>
-                {r.contactEmail}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function ModelTrendsSection({
-  trends,
-  colors,
-  colorScheme,
-}: {
-  trends: ModelTrendSignals;
-  colors: ReturnType<typeof useThemeColors>;
-  colorScheme: "light" | "dark" | null | undefined;
-}) {
-  const heatColor = getScoreColor(trends.marketHeatScore * 100, colorScheme);
-
-  const trendArrow = (
-    trend: string
-  ): { icon: keyof typeof Ionicons.glyphMap; color: string } => {
-    const up = ["Increasing", "Improving", "Rising"];
-    const down = ["Decreasing", "Worsening", "Falling", "Declining"];
-    if (up.includes(trend)) return { icon: "arrow-up", color: colors.success };
-    if (down.includes(trend)) return { icon: "arrow-down", color: colors.error };
-    return { icon: "remove", color: colors.textSecondary };
-  };
-
-  return (
-    <View style={[styles.section, { backgroundColor: colors.surface }]}>
-      <View style={styles.sectionHeader}>
-        <Ionicons name="trending-up-outline" size={18} color={colors.tint} />
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          What's the market?
-        </Text>
-      </View>
-
-      <View style={styles.momentumHeader}>
-        <View style={[styles.momentumBadge, { backgroundColor: heatColor + "22" }]}>
-          <Text style={[styles.momentumLabel, { color: heatColor }]}>
-            {trends.marketHeatLabel} Seller Market
-          </Text>
-          <Ionicons
-            name={
-              trends.marketHeatLabel === "Strong"
-                ? "arrow-up"
-                : trends.marketHeatLabel === "Weak"
-                  ? "arrow-down"
-                  : "remove"
-            }
-            size={14}
-            color={heatColor}
-          />
-        </View>
-        <Text style={[styles.heatScore, { color: heatColor }]}>
-          {Math.round(trends.marketHeatScore * 100)}%
-        </Text>
-      </View>
-
-      <View style={[styles.trendGrid, { borderTopColor: colors.border }]}>
-        <TrendRow
-          label="Inventory"
-          value={trends.inventoryTrend}
-          arrow={trendArrow(trends.inventoryTrend)}
-          colors={colors}
-        />
-        <TrendRow
-          label="Days on Market"
-          value={trends.domTrend}
-          arrow={trendArrow(trends.domTrend)}
-          colors={colors}
-        />
-        <TrendRow
-          label="Asking Prices"
-          value={trends.askingPriceTrend}
-          arrow={trendArrow(trends.askingPriceTrend)}
-          colors={colors}
-        />
-        <TrendRow
-          label="Transaction Velocity"
-          value={trends.transactionVelocityTrend}
-          arrow={trendArrow(trends.transactionVelocityTrend)}
-          colors={colors}
-        />
-      </View>
-
-      {trends.avgDaysOnMarket !== null ? (
-        <View style={[styles.avgDomRow, { borderTopColor: colors.border }]}>
-          <Text style={[styles.utilLabel, { color: colors.textSecondary }]}>
-            Avg Model DOM
-          </Text>
-          <Text style={[styles.utilValue, { color: colors.text }]}>
-            {trends.avgDaysOnMarket} days
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function TrendRow({
-  label,
-  value,
-  arrow,
-  colors,
-}: {
-  label: string;
-  value: string;
-  arrow: { icon: keyof typeof Ionicons.glyphMap; color: string };
-  colors: ReturnType<typeof useThemeColors>;
-}) {
-  return (
-    <View style={styles.trendRow}>
-      <Text style={[styles.trendLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <View style={styles.trendValueRow}>
-        <Ionicons name={arrow.icon} size={12} color={arrow.color} />
-        <Text style={[styles.trendValue, { color: arrow.color }]}>{value}</Text>
-      </View>
-    </View>
-  );
-}
-
-function UtilStat({
-  label,
-  value,
-  colors,
-}: {
-  label: string;
-  value: string;
-  colors: ReturnType<typeof useThemeColors>;
-}) {
-  return (
-    <View style={styles.utilStat}>
-      <Text style={[styles.utilLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <Text style={[styles.utilValue, { color: colors.text }]}>{value}</Text>
+          )}
+          {activeTab === 2 && (
+            <SummaryTab
+              registration={registration!}
+              profile={profile}
+              phase1Status={phase1Status}
+              phase2Status={phase2Status}
+              phase3Status={phase3Status}
+            />
+          )}
+        </Animated.View>
+      </ScrollView>
     </View>
   );
 }
@@ -709,7 +238,7 @@ const styles = StyleSheet.create({
   },
   errorMessage: {
     fontSize: 14,
-    textAlign: "center",
+    textAlign: "center" as const,
     maxWidth: 300,
   },
   retryButton: {
@@ -723,240 +252,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600" as const,
   },
-  section: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+  stickyHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: "600" as const,
-  },
-  ownerOperatorBlock: {
-    marginBottom: 12,
-  },
-  ownerOperatorRow: {
-    marginBottom: 8,
-  },
-  ownerOperatorLabel: {
-    fontSize: 11,
-    fontWeight: "500" as const,
-    letterSpacing: 0.5,
-    textTransform: "uppercase" as const,
-    marginBottom: 2,
-  },
-  ownerOperatorName: {
-    fontSize: 20,
+  headerRegistration: {
+    fontSize: 22,
     fontWeight: "700" as const,
-    lineHeight: 26,
+    letterSpacing: -0.3,
   },
-  ownerOperatorContact: {
-    fontSize: 14,
+  headerModel: {
+    fontSize: 15,
     marginTop: 2,
   },
-  relActionRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8,
-  },
-  relActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    minHeight: 36,
-  },
-  relActionLabel: {
-    fontSize: 13,
-    fontWeight: "500" as const,
-  },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-  },
-  locationText: {
-    fontSize: 13,
-  },
-  timeToSell: {
-    fontSize: 13,
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  factorsContainer: {
-    marginTop: 8,
-  },
-  assumptions: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 12,
-    marginTop: 8,
-  },
-  assumptionsTitle: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    letterSpacing: 0.5,
-    textTransform: "uppercase" as const,
-    marginBottom: 6,
-  },
-  assumptionText: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  utilizationBlock: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: 12,
-    paddingTop: 12,
-  },
-  utilGrid: {
-    gap: 12,
-  },
-  utilStat: {
-    gap: 2,
-  },
-  utilLabel: {
-    fontSize: 11,
-    fontWeight: "500" as const,
-    letterSpacing: 0.5,
-    textTransform: "uppercase" as const,
-  },
-  utilValue: {
-    fontSize: 16,
-    fontWeight: "600" as const,
-    fontVariant: ["tabular-nums" as const],
-  },
-  momentumHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  momentumBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  momentumLabel: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-  },
-  heatScore: {
-    fontSize: 24,
-    fontWeight: "700" as const,
-    fontVariant: ["tabular-nums" as const],
-  },
-  trendGrid: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 12,
-    gap: 10,
-  },
-  trendRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  trendLabel: {
-    fontSize: 13,
-  },
-  trendValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  trendValue: {
-    fontSize: 13,
-    fontWeight: "500" as const,
-  },
-  avgDomRow: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 10,
-    marginTop: 10,
-    gap: 2,
-  },
-  fleetSection: {
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  subSectionTitle: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    letterSpacing: 0.5,
-    textTransform: "uppercase" as const,
-    marginBottom: 8,
-  },
-  fleetList: {
-    gap: 8,
-  },
-  fleetCard: {
-    width: 220,
-  },
-  contactsSection: {
-    marginTop: 4,
-  },
-  contactActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-    flexWrap: "wrap",
-  },
-  contactActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  contactActionLabel: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-  },
-  aiButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 52,
-    borderRadius: 14,
-    marginBottom: 12,
-  },
-  aiButtonText: {
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "600" as const,
-  },
-  photoGallery: {
-    marginHorizontal: -16,
-    marginBottom: 12,
-  },
-  photoGalleryContent: {
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  photoContainer: {
-    width: 280,
-  },
-  photoImage: {
-    width: 280,
-    height: 180,
-    borderRadius: 12,
-  },
-  photoCaption: {
-    fontSize: 11,
-    marginTop: 4,
-    textAlign: "center" as const,
+  tabContent: {
+    flex: 1,
   },
 });

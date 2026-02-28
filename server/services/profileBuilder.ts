@@ -118,11 +118,59 @@ function extractUtilization(data: Record<string, unknown>): UtilizationSummary |
   const earliest = new Date(Math.min(...dates.map((d: Date) => d.getTime())));
   const latest = new Date(Math.max(...dates.map((d: Date) => d.getTime())));
   const monthSpan = Math.max(1, (latest.getTime() - earliest.getTime()) / (30 * 24 * 60 * 60 * 1000));
+  const windowDays = Math.round((latest.getTime() - earliest.getTime()) / (24 * 60 * 60 * 1000));
+
+  const airportCounts: Record<string, number> = {};
+  const routeCounts: Record<string, number> = {};
+  const notes: string[] = [];
+
+  for (const f of flights) {
+    const origin = (f.departureairport || f.origin || f.departairport || f.depart || "").toString().toUpperCase().trim();
+    const dest = (f.arrivalairport || f.destination || f.arriveairport || f.arrive || "").toString().toUpperCase().trim();
+    if (origin) airportCounts[origin] = (airportCounts[origin] || 0) + 1;
+    if (dest) airportCounts[dest] = (airportCounts[dest] || 0) + 1;
+    if (origin && dest) {
+      const pair = [origin, dest].sort().join("-");
+      routeCounts[pair] = (routeCounts[pair] || 0) + 1;
+    }
+  }
+
+  const topRoutes = Object.entries(routeCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([route, count]) => {
+      const parts = route.split("-");
+      return { from: parts[0], to: parts[1] || parts[0], count };
+    });
+
+  const topAirports = Object.entries(airportCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([code, count]) => ({ code, count }));
+
+  const homeBase = topAirports.length > 0 ? topAirports[0].code : undefined;
+
+  if (totalFlights < 6) {
+    notes.push("Limited flight data — analysis based on fewer than 6 flights");
+  }
+  if (windowDays < 300) {
+    notes.push(`Data window covers ${windowDays} days (less than 12 months)`);
+  }
+
+  const windowStart = earliest.toISOString().split("T")[0];
+  const windowEnd = latest.toISOString().split("T")[0];
 
   return {
     totalFlights,
     dateRange: `${earliest.toLocaleDateString()} - ${latest.toLocaleDateString()}`,
     avgFlightsPerMonth: Math.round((totalFlights / monthSpan) * 10) / 10,
+    topRoutes,
+    topAirports,
+    windowStart,
+    windowEnd,
+    windowDays,
+    homeBase,
+    notes: notes.length > 0 ? notes : undefined,
   };
 }
 

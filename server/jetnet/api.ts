@@ -202,3 +202,26 @@ export async function getMarketTrends(
     session
   );
 }
+
+export async function getCondensedOwnerOperators(
+  aircraftId: number,
+  session: SessionState
+): Promise<Record<string, unknown>> {
+  return jetnetRequest(
+    "POST",
+    `/api/Aircraft/getCondensedOwnerOperatorsPaged/{apiToken}/10/1`,
+    session,
+    {
+      aclist: [aircraftId],
+      modlist: [],
+      makeType: "None",
+      airframeType: "None",
+      lifecycle: "None",
+      forsale: "",
+      countrylist: [],
+      regionlist: [],
+      startdate: "",
+      enddate: "",
+    }
+  );
+}

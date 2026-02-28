@@ -10,11 +10,12 @@ import { rankContacts } from "./services/brokerContactRanker";
 import { rankContactsForPersona } from "./agents/contact-ranker";
 import { dispatchToAgent } from "./agents/dispatcher";
 import { computeConfidence } from "./agents/confidence";
-import { getFlightDataPaged, lookupByRegistration, getRelationships, getHistoryListPaged } from "./jetnet/api";
+import { getFlightDataPaged, lookupByRegistration, getRelationships, getHistoryListPaged, getCondensedOwnerOperators, getPictures } from "./jetnet/api";
 import { mountMcpServer } from "./mcp/server";
 import { randomUUID } from "crypto";
-import type { IntelResponse } from "../shared/types";
+import type { IntelResponse, CondensedAircraftProfile } from "../shared/types";
 import type { PersonaId, PersonaIntelPayload } from "../shared/types/persona";
+import { normalizeCondensedResponse } from "./services/condensedService";
 
 const sessions = new Map<
   string,
@@ -343,6 +344,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  app.get(
+    "/api/aircraft/enrich/:acid",
+    async (req: Request, res: Response) => {
+      try {
+        const session = getSession(req);
+        if (!session) {
+          return res.status(401).json({ message: "Not authenticated." });
+        }
+
+        const fresh = await ensureSession(session);
+        const token = req.headers.authorization?.replace("Bearer ", "") || "";
+        const entry = sessions.get(token);
+        if (entry) entry.jetnetSession = fresh;
+
+        const acid = parseInt(req.params.acid, 10);
+        if (isNaN(acid) || acid <= 0) {
+          return res.status(400).json({ message: "Invalid aircraft ID." });
+        }
+
+        const [condensedRaw, relationshipsRaw, picturesRaw] = await Promise.all([
+          getCondensedOwnerOperators(acid, fresh),
+          getRelationships(acid, fresh),
+          getPictures(acid, fresh),
+        ]);
+
+        const condensed = normalizeCondensedResponse(condensedRaw);
+        const relationships = normalizeRelationships(relationshipsRaw);
+
+        const picturesArr = (picturesRaw as any)?.pictureresult || (picturesRaw as any)?.PictureResult || [];
+        const pictures = Array.isArray(picturesArr)
+          ? picturesArr.map((p: any) => ({
+              url: p.pictureurl || p.PictureUrl || p.url || "",
+              caption: p.picturecaption || p.PictureCaption || p.caption || null,
+            }))
+          : [];
+
+        return res.json({
+          phase: 2,
+          condensed,
+          relationships,
+          pictures,
+        });
+      } catch (err: any) {
+        const status = err instanceof JetnetError ? 502 : 500;
+        return res.status(status).json({
+          message: err.message || "Failed to enrich aircraft.",
+          source: err instanceof JetnetError ? "jetnet" : "internal",
+        });
+      }
+    }
+  );
+
   app.post(
     "/api/aircraft/:registration/persona-intel",
     async (req: Request, res: Response) => {
@@ -377,24 +430,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const flightRaw = await getFlightDataPaged(acid, fresh);
           const flights = normalizeFlights(flightRaw);
+          const intel = analyzeFlights(flights);
           if (flights.length > 0) {
-            const intel = analyzeFlights(flights);
+            const airportEntries = Object.entries(
+              flights.reduce<Record<string, number>>((acc, f) => {
+                if (f.origin) acc[f.origin] = (acc[f.origin] || 0) + 1;
+                if (f.destination) acc[f.destination] = (acc[f.destination] || 0) + 1;
+                return acc;
+              }, {})
+            ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
             flightIntelData = {
               available: true,
               totalFlights: intel.totalFlights,
               totalHours: intel.totalHours ?? undefined,
+              windowDays: intel.windowDays,
+              windowStart: intel.windowStart ?? undefined,
+              windowEnd: intel.windowEnd ?? undefined,
               avgFlightsPerMonth: intel.avgFlightsPerMonth,
-              topRoutes: intel.topRoutes.slice(0, 5).map((r) => ({
-                from: r.route.split("→")[0]?.trim() || "",
-                to: r.route.split("→")[1]?.trim() || "",
-                count: r.count,
+              topRoutes: intel.topRoutes.slice(0, 5).map((r) => {
+                const parts = r.route.split("-");
+                return {
+                  from: parts[0]?.trim() || "",
+                  to: parts[1]?.trim() || "",
+                  count: r.count,
+                };
+              }),
+              topAirports: airportEntries.map(([code, count]) => ({
+                code,
+                count,
+                role: code === intel.primaryBaseAirport ? "base" : "destination",
               })),
-              topAirports: intel.topAirports.slice(0, 5).map((a) => ({
-                code: a.airport,
-                count: a.count,
-                role: a.airport === intel.primaryBase ? "base" : "destination",
-              })),
-              estimatedHomeBase: intel.primaryBase || undefined,
+              estimatedHomeBase: intel.primaryBaseAirport || undefined,
+              notes: intel.notes.length > 0 ? intel.notes : undefined,
+            };
+          } else {
+            flightIntelData = {
+              available: false,
+              notes: intel.notes,
             };
           }
         } catch (e) {

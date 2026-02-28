@@ -19,6 +19,19 @@ const Colors = {
     error: "#FF3B30",
     cardBackground: "#FFFFFF",
     inputBackground: "#E5E5EA",
+    primaryLabel: "#000000",
+    secondaryLabel: "rgba(60,60,67,0.6)",
+    tertiaryLabel: "rgba(60,60,67,0.3)",
+    separator: "rgba(60,60,67,0.12)",
+    systemBackground: "#F2F2F7",
+    secondaryBackground: "#FFFFFF",
+    tertiaryBackground: "#F2F2F7",
+    systemBlue: "#007AFF",
+    systemGreen: "#34C759",
+    systemOrange: "#FF9500",
+    systemRed: "#FF3B30",
+    skeletonBase: "#E8E8ED",
+    skeletonHighlight: "#F2F2F7",
   },
   dark: {
     text: "#FFFFFF",
@@ -40,8 +53,39 @@ const Colors = {
     error: "#FF453A",
     cardBackground: "#1C1C1E",
     inputBackground: "#2C2C2E",
+    primaryLabel: "#FFFFFF",
+    secondaryLabel: "rgba(235,235,245,0.6)",
+    tertiaryLabel: "rgba(235,235,245,0.3)",
+    separator: "rgba(84,84,88,0.6)",
+    systemBackground: "#000000",
+    secondaryBackground: "#1C1C1E",
+    tertiaryBackground: "#2C2C2E",
+    systemBlue: "#0A84FF",
+    systemGreen: "#30D158",
+    systemOrange: "#FF9F0A",
+    systemRed: "#FF453A",
+    skeletonBase: "#2C2C2E",
+    skeletonHighlight: "#3A3A3C",
   },
 };
+
+export const PersonaAccentColors: Record<string, { light: string; dark: string }> = {
+  dealer_broker: { light: "#007AFF", dark: "#0A84FF" },
+  fbo: { light: "#5856D6", dark: "#5E5CE6" },
+  mro: { light: "#FF9500", dark: "#FF9F0A" },
+  charter: { light: "#34C759", dark: "#30D158" },
+  fleet_management: { light: "#AF52DE", dark: "#BF5AF2" },
+  finance: { light: "#000000", dark: "#FFFFFF" },
+  catering: { light: "#FF2D55", dark: "#FF375F" },
+  ground_transportation: { light: "#5AC8FA", dark: "#64D2FF" },
+  detailing: { light: "#FFCC00", dark: "#FFD60A" },
+};
+
+export function getPersonaAccent(personaId: string, colorScheme: "light" | "dark" | null | undefined): string {
+  const entry = PersonaAccentColors[personaId];
+  if (!entry) return colorScheme === "dark" ? "#0A84FF" : "#007AFF";
+  return colorScheme === "dark" ? entry.dark : entry.light;
+}
 
 export default Colors;
 

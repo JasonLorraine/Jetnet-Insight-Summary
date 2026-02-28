@@ -21,6 +21,10 @@ export interface FlightIntelligence {
   seasonalPattern: string | null;
   charterLikelihood: "low" | "medium" | "high";
   preSaleSignals: string[];
+  windowDays: number;
+  windowStart: string | null;
+  windowEnd: string | null;
+  notes: string[];
 }
 
 export function normalizeFlights(raw: Record<string, unknown>): FlightRecord[] {
@@ -163,8 +167,24 @@ export function analyzeFlights(flights: FlightRecord[]): FlightIntelligence {
 
   const firstDate = new Date(sorted[0].date);
   const lastDate = new Date(sorted[sorted.length - 1].date);
-  const monthSpan = Math.max(1, (lastDate.getTime() - firstDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
+  const windowDaysRaw = Math.round((lastDate.getTime() - firstDate.getTime()) / (24 * 60 * 60 * 1000));
+  const windowDays = Math.max(1, windowDaysRaw);
+  const windowStart = sorted[0].date;
+  const windowEnd = sorted[sorted.length - 1].date;
+
+  const monthSpan = Math.max(1, windowDaysRaw / 30);
   const avgFlightsPerMonth = Math.round((totalFlights / monthSpan) * 10) / 10;
+
+  const notes: string[] = [];
+
+  if (totalFlights < 6) {
+    notes.push(`Limited data: only ${totalFlights} flights in analysis window — results may not reflect typical activity`);
+  }
+
+  if (windowDaysRaw < 365) {
+    const actualMonths = Math.max(1, Math.round(windowDaysRaw / 30));
+    notes.push(`Data window is ${actualMonths} month${actualMonths !== 1 ? "s" : ""} (${windowDaysRaw} days), shorter than 12 months — averages computed from actual period`);
+  }
 
   const activityTrendSlope = computeTrendSlope(monthlyBreakdown);
 
@@ -207,6 +227,10 @@ export function analyzeFlights(flights: FlightRecord[]): FlightIntelligence {
     seasonalPattern,
     charterLikelihood,
     preSaleSignals,
+    windowDays,
+    windowStart,
+    windowEnd,
+    notes,
   };
 }
 
@@ -337,5 +361,9 @@ function emptyIntelligence(): FlightIntelligence {
     seasonalPattern: null,
     charterLikelihood: "low",
     preSaleSignals: [],
+    windowDays: 0,
+    windowStart: null,
+    windowEnd: null,
+    notes: ["No flight data available for this aircraft"],
   };
 }

@@ -95,6 +95,8 @@ export interface PersonaIntelPayload {
     totalFlights?: number;
     totalHours?: number;
     windowDays?: number;
+    windowStart?: string;
+    windowEnd?: string;
     topRoutes?: Array<{ from: string; to: string; count: number }>;
     topAirports?: Array<{ code: string; count: number; role: string }>;
     estimatedHomeBase?: string;
