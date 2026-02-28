@@ -1,0 +1,252 @@
+Good — this screenshot actually tells us **exactly** what is wrong, and this is a very common JETNET Connect issue.
+
+You are **not failing authentication**.
+
+You are hitting:
+
+```
+HTTP 406 Not Acceptable
+```
+
+on:
+
+```
+/api/Aircraft/getRegNumber/N4911N/{apiToken}
+```
+
+This almost always means **the request headers or content negotiation are wrong**, not the URL itself.
+
+Let’s walk through this surgically.
+
+---
+
+# ✅ Root Cause (Most Likely)
+
+JETNET Connect requires an explicit **Accept header**.
+
+Your mobile app (or fetch layer) is sending either:
+
+* no `Accept` header, or
+* `Accept: */*`, or
+* iOS default negotiation
+
+JETNET rejects this with **406**.
+
+This is different from most APIs.
+
+---
+
+# ✅ REQUIRED HEADERS (JETNET CONNECT)
+
+Every GET request must include:
+
+```http
+Accept: application/json
+Authorization: Bearer {bearerToken}
+```
+
+If `Accept` is missing → 406.
+
+---
+
+## 🔴 What your app is currently doing
+
+React Native / Expo / Swift fetch defaults to:
+
+```
+Accept: */*
+```
+
+JETNET does not accept that.
+
+---
+
+# ✅ FIX (Engineer Action)
+
+Locate the request in:
+
+```
+Jetnet-Insight-Summary
+```
+
+where you call:
+
+```ts
+getRegNumber
+```
+
+You likely have something like:
+
+```ts
+fetch(url)
+```
+
+---
+
+## Replace with:
+
+```ts
+await fetch(url, {
+  method: "GET",
+  headers: {
+    "Accept": "application/json",
+    "Authorization": `Bearer ${bearerToken}`
+  }
+});
+```
+
+---
+
+# ✅ SECOND POSSIBLE ISSUE (Seen Often)
+
+Your screenshot shows:
+
+```
+500: {"message":"HTTP 406 Not Acceptable"}
+```
+
+Meaning:
+
+👉 Your backend is catching the 406 and rethrowing as 500.
+
+You should NOT mask upstream errors.
+
+---
+
+## Fix backend error passthrough
+
+Instead of:
+
+```ts
+throw new Error(response.statusText);
+```
+
+do:
+
+```ts
+if (!response.ok) {
+  const text = await response.text();
+  throw new Error(`JETNET ERROR ${response.status}: ${text}`);
+}
+```
+
+This will save you hours later.
+
+---
+
+# ✅ THIRD CHECK (VERY IMPORTANT)
+
+Make sure you are sending **Bearer token**, not apiToken.
+
+Correct split:
+
+| Token       | Used For             |
+| ----------- | -------------------- |
+| bearerToken | Authorization header |
+| apiToken    | URL path parameter   |
+
+Example:
+
+```
+Authorization: Bearer eyJhbGciOi...
+```
+
+AND
+
+```
+/getRegNumber/N4911N/{apiToken}
+```
+
+Both required.
+
+---
+
+# ✅ QUICK CURL TEST (Engineer Should Run)
+
+Have engineering verify outside the app:
+
+```bash
+curl -X GET \
+"https://customer.jetnetconnect.com/api/Aircraft/getRegNumber/N4911N/API_TOKEN" \
+-H "Accept: application/json" \
+-H "Authorization: Bearer BEARER_TOKEN"
+```
+
+If this works → app header issue confirmed.
+
+---
+
+# ✅ WHY THIS HAPPENS (JETNET QUIRK)
+
+JETNET Connect uses strict ASP.NET content negotiation.
+
+If the server cannot match an accepted media type:
+
+```
+406 Not Acceptable
+```
+
+Most modern APIs silently fallback — JETNET does not.
+
+---
+
+# ✅ Recommended Permanent Fix (Repo Level)
+
+Create a single request wrapper.
+
+```
+/services/jetnetClient.ts
+```
+
+```ts
+export async function jetnetRequest(path: string) {
+  return fetch(`${BASE_URL}${path}`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${session.bearerToken}`
+    }
+  });
+}
+```
+
+Never call fetch directly again.
+
+---
+
+# 🔥 Why You Hit This Now
+
+Your mobile app is the first environment using:
+
+* native networking stack
+* automatic headers
+* stricter negotiation
+
+Postman probably worked — mobile does not.
+
+Classic transition bug.
+
+---
+
+# ✅ After This Fix
+
+Your workflow will properly return:
+
+```json
+{
+  "aircraftid": ####,
+  "modelid": ####
+}
+```
+
+which then unlocks:
+
+* ModelTrends
+* Hot/Not scoring
+* SkyView signals
+* Evolution linking
+
+---
+
+If you want, next I can show you something extremely useful:
+
+👉 **the 3 silent failure cases in JETNET Connect that will break production later even after this fix** — almost every integration hits them.

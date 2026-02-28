@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { login, ensureSession, type SessionState } from "./jetnet/session";
+import { login, ensureSession, JetnetError, type SessionState } from "./jetnet/session";
 import { buildAircraftProfile } from "./services/profileBuilder";
 import { generateAISummary } from "./services/aiSummary";
 import { mountMcpServer } from "./mcp/server";
@@ -108,9 +108,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         return res.json(profile);
       } catch (err: any) {
+        const status = err instanceof JetnetError ? 502 : 500;
         return res
-          .status(500)
-          .json({ message: err.message || "Failed to fetch profile." });
+          .status(status)
+          .json({
+            message: err.message || "Failed to fetch profile.",
+            source: err instanceof JetnetError ? "jetnet" : "internal",
+          });
       }
     }
   );
@@ -148,9 +152,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         return res.json(summary);
       } catch (err: any) {
+        const status = err instanceof JetnetError ? 502 : 500;
         return res
-          .status(500)
-          .json({ message: err.message || "Failed to generate summary." });
+          .status(status)
+          .json({
+            message: err.message || "Failed to generate summary.",
+            source: err instanceof JetnetError ? "jetnet" : "internal",
+          });
       }
     }
   );

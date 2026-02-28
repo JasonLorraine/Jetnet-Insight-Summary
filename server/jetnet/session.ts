@@ -70,7 +70,10 @@ export async function login(
   const url = `${resolvedBaseUrl}/api/Admin/APILogin`;
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     body: JSON.stringify({
       emailAddress: resolvedEmail,
       password: resolvedPassword,
@@ -118,7 +121,10 @@ export async function ensureSession(
   try {
     const url = `${session.baseUrl}/api/Admin/getAccountInfo/${session.apiToken}`;
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${session.bearerToken}` },
+      headers: {
+        Authorization: `Bearer ${session.bearerToken}`,
+        Accept: "application/json",
+      },
     });
 
     if (response.ok) {
@@ -148,6 +154,7 @@ export async function jetnetRequest(
   const headers: Record<string, string> = {
     Authorization: `Bearer ${session.bearerToken}`,
     "Content-Type": "application/json",
+    Accept: "application/json",
   };
 
   const init: RequestInit = {
@@ -159,7 +166,12 @@ export async function jetnetRequest(
   let response = await fetch(url, init);
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText} -- ${url}`);
+    const bodyText = await response.text().catch(() => "");
+    throw new JetnetError(
+      path,
+      `HTTP ${response.status}`,
+      `${response.statusText}${bodyText ? ": " + bodyText.slice(0, 500) : ""}`
+    );
   }
 
   let data = (await response.json()) as Record<string, unknown>;

@@ -2,9 +2,24 @@ import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 let _sessionToken: string | null = null;
+let _reLoginFn: (() => Promise<string | null>) | null = null;
+let _reLoginPromise: Promise<string | null> | null = null;
 
 export function setSessionToken(token: string | null) {
   _sessionToken = token;
+}
+
+export function setReLoginHandler(fn: (() => Promise<string | null>) | null) {
+  _reLoginFn = fn;
+}
+
+async function attemptReLogin(): Promise<string | null> {
+  if (!_reLoginFn) return null;
+  if (_reLoginPromise) return _reLoginPromise;
+  _reLoginPromise = _reLoginFn().finally(() => {
+    _reLoginPromise = null;
+  });
+  return _reLoginPromise;
 }
 
 export function getApiUrl(): string {
@@ -47,12 +62,25 @@ export async function apiRequest(
     ...(data ? { "Content-Type": "application/json" } : {}),
   };
 
-  const res = await fetch(url.toString(), {
+  let res = await fetch(url.toString(), {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
+
+  if (res.status === 401 && _reLoginFn) {
+    const newToken = await attemptReLogin();
+    if (newToken) {
+      headers["Authorization"] = `Bearer ${newToken}`;
+      res = await fetch(url.toString(), {
+        method,
+        headers,
+        body: data ? JSON.stringify(data) : undefined,
+        credentials: "include",
+      });
+    }
+  }
 
   await throwIfResNotOk(res);
   return res;
@@ -67,10 +95,20 @@ export const getQueryFn: <T>(options: {
     const baseUrl = getApiUrl();
     const url = new URL(queryKey.join("/") as string, baseUrl);
 
-    const res = await fetch(url.toString(), {
+    let res = await fetch(url.toString(), {
       headers: authHeaders(),
       credentials: "include",
     });
+
+    if (res.status === 401 && _reLoginFn) {
+      const newToken = await attemptReLogin();
+      if (newToken) {
+        res = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${newToken}` },
+          credentials: "include",
+        });
+      }
+    }
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;

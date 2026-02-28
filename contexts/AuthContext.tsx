@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { setSessionToken as setGlobalToken } from "@/lib/query-client";
+import { setSessionToken as setGlobalToken, setReLoginHandler, getApiUrl } from "@/lib/query-client";
 
 interface AuthState {
   sessionToken: string | null;
@@ -60,6 +60,41 @@ async function secureDelete(key: string): Promise<void> {
   return SecureStore.deleteItemAsync(key);
 }
 
+function registerReLoginHandler() {
+  setReLoginHandler(async () => {
+    try {
+      const [email, password] = await Promise.all([
+        secureGet(KEYS.JETNET_EMAIL),
+        secureGet(KEYS.JETNET_PASSWORD),
+      ]);
+      if (!email || !password) return null;
+
+      const baseUrl = getApiUrl();
+      const url = new URL("/api/auth/login", baseUrl);
+      const res = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jetnetEmail: email, jetnetPassword: password }),
+      });
+
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      const { appSessionToken, expiresAt } = data;
+
+      setGlobalToken(appSessionToken);
+      await Promise.all([
+        secureSet(KEYS.SESSION_TOKEN, appSessionToken),
+        secureSet(KEYS.SESSION_EXPIRES, expiresAt),
+      ]);
+
+      return appSessionToken;
+    } catch {
+      return null;
+    }
+  });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     sessionToken: null,
@@ -99,6 +134,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setGlobalToken(token);
         }
 
+        registerReLoginHandler();
+
         setState({
           sessionToken: isAuthenticated ? token : null,
           sessionExpiresAt: isAuthenticated ? expires : null,
@@ -112,10 +149,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setState((prev) => ({ ...prev, isLoading: false }));
       }
     })();
+
+    return () => {
+      setReLoginHandler(null);
+    };
   }, []);
 
   const loginFn = useCallback(async (email: string, password: string) => {
-    const { getApiUrl } = await import("@/lib/query-client");
     const baseUrl = getApiUrl();
     const url = new URL("/api/auth/login", baseUrl);
 
@@ -153,7 +193,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logoutFn = useCallback(async () => {
     if (state.sessionToken) {
       try {
-        const { getApiUrl } = await import("@/lib/query-client");
         const baseUrl = getApiUrl();
         const url = new URL("/api/auth/logout", baseUrl);
         await fetch(url.toString(), {
